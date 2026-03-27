@@ -32,6 +32,8 @@ from .models import CodeNode
  
 logger = logging.getLogger(__name__)
  
+HEALTH_CHECK_TOKEN_SIZE = 5
+ 
 # Preferred Ollama code models in priority order (install.sh default: qwen3.5:4b)
 _OLLAMA_CODE_MODELS = [
     "qwen3.5:4b",
@@ -56,15 +58,17 @@ class BaseLLM(ABC):
  
     provider_name: str = "base"
     _cache = None  # Optional LLMDiskCache instance
+    max_summarization_tokens: int = 400
+    max_reasoning_tokens: int = 1000
  
     # ── abstract ─────────────────────────────────────────────────────────
  
     @abstractmethod
-    def call(self, message: str, stream: bool = False, max_tokens: int = 200) -> str | Iterator[str]:
+    def call(self, message: str, stream: bool = False, max_tokens: int | None = None) -> str | Iterator[str]:
         pass
  
     @abstractmethod
-    def chat(self, messages: list[dict], stream: bool = False, max_tokens: int = 200) -> str | Iterator[str]:
+    def chat(self, messages: list[dict], stream: bool = False, max_tokens: int | None = None) -> str | Iterator[str]:
         pass
  
     # ── parallelism ──────────────────────────────────────────────────────
@@ -97,7 +101,7 @@ class BaseLLM(ABC):
  
     def health_check(self) -> tuple[bool, str]:
         """Quick connectivity test. Returns (ok, message)."""
-        result = str(self.call("Say OK", stream=False, max_tokens=5))
+        result = str(self.call("Say OK", stream=False, max_tokens=HEALTH_CHECK_TOKEN_SIZE))
         if self._is_error_response(result):
             return False, result
         return True, "OK"
@@ -111,14 +115,14 @@ class BaseLLM(ABC):
     def disable_cache(self) -> None:
         self._cache = None
  
-    def complete(self, prompt: str, max_tokens: int = 200) -> str:
+    def complete(self, prompt: str, max_tokens: int | None = None) -> str:
         """Cached completion: checks disk cache before calling the LLM."""
         if self._cache is not None:
             from .storage import LLMDiskCache
             key = LLMDiskCache.make_key(
                 self.provider_name,
                 getattr(self, "model", ""),
-                max_tokens,
+                max_tokens or 0,
                 prompt,
             )
             cached = self._cache.get(key)
@@ -130,7 +134,7 @@ class BaseLLM(ABC):
             return result
         return str(self.call(prompt, stream=False, max_tokens=max_tokens))
  
-    def stream_complete(self, prompt: str, max_tokens: int = 200) -> Iterator[str]:
+    def stream_complete(self, prompt: str, max_tokens: int | None = None) -> Iterator[str]:
         """Streaming completion with cache support (tee pattern).
  
         Cache hit  → yield the cached string as a single chunk.
@@ -202,7 +206,8 @@ class OllamaProvider(BaseLLM):
     provider_name = "ollama"
  
     def __init__(self, model: str | None = None, host: str | None = None,
-                 temperature: float = 0.1, max_tokens: int = 200):
+                 temperature: float = 0.1, max_summarization_tokens: int = 400,
+                 max_reasoning_tokens: int = 1000):
         try:
             import ollama as _ollama  # noqa: F401
         except ImportError:
@@ -211,7 +216,8 @@ class OllamaProvider(BaseLLM):
         self.host = host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
         self.model = model or self.auto_select_model() or "qwen3.5:4b"
         self.temperature = float(temperature)
-        self.default_max_tokens = int(max_tokens)
+        self.max_summarization_tokens = int(max_summarization_tokens)
+        self.max_reasoning_tokens = int(max_reasoning_tokens)
         self._client = None
         self._detected_workers: int | None = None
  
@@ -247,7 +253,7 @@ class OllamaProvider(BaseLLM):
                     model=self.model,
                     messages=[{"role": "user", "content": "hi"}],
                     think=False,
-                    options={"num_predict": 1},
+                    options={"num_predict": HEALTH_CHECK_TOKEN_SIZE},
                 )
             except Exception:
                 pass
@@ -279,12 +285,12 @@ class OllamaProvider(BaseLLM):
  
     # ── core LLM calls ───────────────────────────────────────────────────
  
-    def call(self, message: str, stream: bool = False, max_tokens: int = 200) -> str | Iterator[str]:
+    def call(self, message: str, stream: bool = False, max_tokens: int | None = None) -> str | Iterator[str]:
         return self.chat([{"role": "user", "content": message}], stream=stream, max_tokens=max_tokens)
  
     def chat(self, messages: list[dict], stream: bool = False, max_tokens: int | None = None) -> str | Iterator[str]:
         if max_tokens is None:
-            max_tokens = self.default_max_tokens
+            max_tokens = self.max_summarization_tokens
         try:
             client = self._get_client()
             response = client.chat(
@@ -336,8 +342,9 @@ class OllamaProvider(BaseLLM):
  
     def clone(self) -> "OllamaProvider":
         return OllamaProvider(model=self.model, host=self.host,
-                              temperature=self.temperature,
-                              max_tokens=self.default_max_tokens)
+                               temperature=self.temperature,
+                               max_summarization_tokens=self.max_summarization_tokens,
+                               max_reasoning_tokens=self.max_reasoning_tokens)
  
  
 register_provider("ollama", OllamaProvider)
@@ -348,25 +355,27 @@ class OpenAICompatibleProvider(BaseLLM):
     provider_name = "openai-compatible"
  
     def __init__(self, model: str = "gpt-4o-mini", base_url: str = "https://api.openai.com/v1",
-                 api_key: str = "", temperature: float = 0.1, max_tokens: int = 200,
+                 api_key: str = "", temperature: float = 0.1, 
+                 max_summarization_tokens: int = 400, max_reasoning_tokens: int = 1000,
                  timeout: int = 60):
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.temperature = float(temperature)
-        self.default_max_tokens = int(max_tokens)
+        self.max_summarization_tokens = int(max_summarization_tokens)
+        self.max_reasoning_tokens = int(max_reasoning_tokens)
         self.timeout = int(timeout)
  
     @property
     def num_workers(self) -> int:
         return 8
  
-    def call(self, message: str, stream: bool = False, max_tokens: int = 200) -> str | Iterator[str]:
+    def call(self, message: str, stream: bool = False, max_tokens: int | None = None) -> str | Iterator[str]:
         return self.chat([{"role": "user", "content": message}], stream=stream, max_tokens=max_tokens)
  
     def chat(self, messages: list[dict], stream: bool = False, max_tokens: int | None = None) -> str | Iterator[str]:
         if max_tokens is None:
-            max_tokens = self.default_max_tokens
+            max_tokens = self.max_summarization_tokens
         if stream:
             return self._chat_stream(messages, max_tokens)
         
@@ -433,10 +442,11 @@ class OpenAICompatibleProvider(BaseLLM):
  
     def clone(self) -> "OpenAICompatibleProvider":
         return OpenAICompatibleProvider(model=self.model, base_url=self.base_url,
-                                        api_key=self.api_key,
-                                        temperature=self.temperature,
-                                        max_tokens=self.default_max_tokens,
-                                        timeout=self.timeout)
+                                         api_key=self.api_key,
+                                         temperature=self.temperature,
+                                         max_summarization_tokens=self.max_summarization_tokens,
+                                         max_reasoning_tokens=self.max_reasoning_tokens,
+                                         timeout=self.timeout)
  
  
 register_provider("openai-compatible", OpenAICompatibleProvider)
@@ -475,13 +485,15 @@ def get_provider(config: dict | None = None) -> BaseLLM:
         config_base_url = config.get("base_url", "").strip()
         config_api_key = config.get("api_key", "").strip()
         config_temperature = float(config.get("temperature", "0.1").strip())
-        config_max_tokens = int(config.get("max_tokens", "200").strip())
+        config_summarization_tokens = int(config.get("max_summarization_tokens", "400").strip())
+        config_reasoning_tokens = int(config.get("max_reasoning_tokens", "1000").strip())
         config_timeout = int(config.get("timeout", "60").strip())
  
         if config_model:
             config_kwargs["model"] = config_model
         config_kwargs["temperature"] = config_temperature
-        config_kwargs["max_tokens"] = config_max_tokens
+        config_kwargs["max_summarization_tokens"] = config_summarization_tokens
+        config_kwargs["max_reasoning_tokens"] = config_reasoning_tokens
  
         if config_provider == "openai-compatible":
             if config_base_url:
@@ -547,7 +559,7 @@ Do not use introductory filler phrases. State facts directly.
  
 Summary (1 sentence):"""
  
-        return self.provider.complete(prompt, max_tokens=100)
+        return self.provider.complete(prompt, max_tokens=self.provider.max_summarization_tokens)
  
     def summarize_file(self, node: CodeNode) -> str:
         """Summarize a file from its children's summaries — no source reading needed."""
@@ -569,7 +581,7 @@ Do not list the components — synthesize them into a coherent description.
  
 Summary:"""
  
-        return self.provider.complete(prompt, max_tokens=150)
+        return self.provider.complete(prompt, max_tokens=self.provider.max_summarization_tokens)
  
     def summarize_module(self, node: CodeNode) -> str:
         """Summarize a directory/module from its files' summaries."""
@@ -591,7 +603,7 @@ Be specific. Avoid phrases like "this module contains" or "this directory has".
  
 Summary:"""
  
-        return self.provider.complete(prompt, max_tokens=150)
+        return self.provider.complete(prompt, max_tokens=self.provider.max_summarization_tokens)
  
     def summarize_doc(self, node: CodeNode, content: str) -> str:
         """Summarize a documentation file (README, etc.)."""
@@ -603,7 +615,7 @@ Content (first 2500 chars):
  
 Summary:"""
  
-        return self.provider.complete(prompt, max_tokens=150)
+        return self.provider.complete(prompt, max_tokens=self.provider.max_summarization_tokens)
  
     def summarize_repo(self, root: CodeNode) -> str:
         """Generate the top-level repository overview."""
@@ -630,7 +642,7 @@ Be specific and concrete. Avoid vague words like "comprehensive" or "robust".
  
 Overview:"""
  
-        return self.provider.complete(prompt, max_tokens=250)
+        return self.provider.complete(prompt, max_tokens=self.provider.max_summarization_tokens)
  
  
 # ── Pipeline ─────────────────────────────────────────────────────────────────

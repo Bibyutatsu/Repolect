@@ -164,7 +164,7 @@ Return ONLY a JSON array of node_ids, e.g.: ["0001", "0003"]
 Return at most 4 modules. If none seem relevant, return [].
 Return ONLY the JSON array, no other text."""
  
-        response = self.provider.complete(prompt, max_tokens=100)
+        response = self.provider.complete(prompt, max_tokens=self.provider.max_reasoning_tokens)
  
         if verbose:
             print(f"  📂 Root probe selected: {response[:100]}")
@@ -204,7 +204,7 @@ Return ONLY a JSON array like:
 Scores are 1-10. Return at most 5. Return [] if none are relevant.
 Return ONLY the JSON array, no other text."""
  
-            response = self.provider.complete(prompt, max_tokens=200)
+            response = self.provider.complete(prompt, max_tokens=self.provider.max_reasoning_tokens)
  
             if verbose:
                 print(f"  📄 Module `{module.title}` selected: {response[:100]}")
@@ -395,7 +395,7 @@ Source (first 30 lines):
  
 Explain in 2-3 sentences: what this component does, why it exists, and how it fits into the larger system. Be specific about the role — mention concrete callers/callees if available."""
  
-        return self.provider.complete(prompt, max_tokens=250)
+        return self.provider.complete(prompt, max_tokens=self.provider.max_reasoning_tokens)
  
     def _get_ancestors(self, target_id: str) -> list[CodeNode]:
         """Walk tree to find ancestor chain."""
@@ -608,13 +608,13 @@ Answer:"""
     def explain(self, query: str, results: list[SearchResult]) -> str:
         if not results:
             return "No relevant code found for that query."
-        return self.provider.complete(self._build_prompt(query, results), max_tokens=600)
+        return self.provider.complete(self._build_prompt(query, results), max_tokens=self.provider.max_reasoning_tokens)
  
     def stream_explain(self, query: str, results: list[SearchResult]):
         """Stream the answer token by token."""
         if not results:
             return iter(["No relevant code found for that query."])
-        return self.provider.stream_complete(self._build_prompt(query, results), max_tokens=600)
+        return self.provider.stream_complete(self._build_prompt(query, results), max_tokens=self.provider.max_reasoning_tokens)
  
  
 # ── JSON parsing helpers ─────────────────────────────────────────────────────

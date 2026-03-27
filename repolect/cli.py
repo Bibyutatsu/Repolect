@@ -844,7 +844,6 @@ def diff_cmd(ref, repo, with_impact, max_hops):
 @cli.command()
 def mcp():
     """Start MCP server for AI editor integration (Claude Code, Cursor, Windsurf, etc.)."""
-    click.echo("Starting Repolect MCP server...")
     _start_mcp_server()
  
  

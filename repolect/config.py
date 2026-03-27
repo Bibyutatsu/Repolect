@@ -34,7 +34,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
  
     # LLM call defaults
     "temperature": "0.1",
-    "max_tokens": "200",
+    "max_summarization_tokens": "400",
+    "max_reasoning_tokens": "1000",
     "timeout": "60",                          # request timeout in seconds
  
     # Embeddings
@@ -50,7 +51,8 @@ _ENV_OVERRIDES: dict[str, str] = {
     "model_name": "REPOLECT_MODEL",
     "api_key": "REPOLECT_API_KEY",
     "temperature": "REPOLECT_TEMPERATURE",
-    "max_tokens": "REPOLECT_MAX_TOKENS",
+    "max_summarization_tokens": "REPOLECT_MAX_SUMMARIZATION_TOKENS",
+    "max_reasoning_tokens": "REPOLECT_MAX_REASONING_TOKENS",
     "timeout": "REPOLECT_TIMEOUT",
     "embedding_provider": "REPOLECT_EMBED_PROVIDER",
     "embedding_model": "REPOLECT_EMBED_MODEL",
