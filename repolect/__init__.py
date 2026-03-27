@@ -1,5 +1,5 @@
 """
-RepoBrain — Hybrid Tree + Graph Code Intelligence
+Repolect — Hybrid Tree + Graph Code Intelligence
 Build a hierarchical semantic tree and knowledge graph of any codebase,
 use LLM reasoning to navigate it, and optionally generate embeddings.
 """
