@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+ 
+[project]
+name = "repolect"
+version = "0.1.0"
+description = "Vectorless code intelligence — reasoning-based retrieval over any codebase"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+keywords = ["code-intelligence", "rag", "llm", "mcp", "graph", "code-search"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+ 
+dependencies = [
+    "click>=8.1.0",
+    "tqdm>=4.65.0",
+    "pathspec>=0.11.0",
+    "networkx>=3.2",
+    "requests>=2.31.0",
+    "grand-cypher>=1.0.0",
+    "tree-sitter>=0.21,<0.22",
+    "tree-sitter-languages>=1.10.2",
+]
+ 
+[project.optional-dependencies]
+graph = ["falkordblite>=0.9.0"]
+ollama = ["ollama>=0.2.0"]
+embeddings = ["ollama>=0.2.0"]
+mcp = ["mcp>=1.0.0"]
+viz = ["streamlit", "pyvis"]
+all = [
+    "falkordblite>=0.9.0",
+    "ollama>=0.2.0",
+    "mcp>=1.0.0",
+    "streamlit",
+    "pyvis",
+]
+dev = ["pytest>=7.4", "pytest-cov", "black>=24.0", "mypy>=1.8", "ruff>=0.3.0"]
+ 
+[project.scripts]
+repolect = "repolect.cli:cli"
+ 
+[tool.setuptools.packages.find]
+include = ["repolect*"]
+ 
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+ 
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+ 
