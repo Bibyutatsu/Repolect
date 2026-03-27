@@ -640,7 +640,7 @@ def summarize_tree(
     repo_root: str | Path,
     summarizer: Summarizer,
     only_node_ids: list[str] | None = None,
-    progress_callback: Callable[[int, int, str], None] | None = None,
+    progress_callback: Callable[[int, int, str, str], None] | None = None,
     max_workers: int | None = None,
 ) -> None:
     """Bottom-up summarization of the entire tree.
@@ -688,7 +688,7 @@ def summarize_tree(
                 node.summary = _summarize_node(node, repo_root, summarizer)
                 current += 1
                 if progress_callback:
-                    progress_callback(current, total, node.title)
+                    progress_callback(current, total, node.title, node.summary)
             continue
  
         with ThreadPoolExecutor(max_workers=min(resolved_workers, len(stage))) as executor:
@@ -701,7 +701,7 @@ def summarize_tree(
                 node.summary = future.result()
                 current += 1
                 if progress_callback:
-                    progress_callback(current, total, node.title)
+                    progress_callback(current, total, node.title, node.summary)
  
  
 def _resolve_worker_count(explicit: int | None, env_name: str, default: int) -> int:

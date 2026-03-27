@@ -202,16 +202,24 @@ def get_embedder(config: dict | None = None):
         )
         return None
  
+    main_provider = config.get("provider", "").strip()
+
     if embed_provider == "ollama":
         host = config.get("embedding_base_url", "").strip()
         if not host:
-            host = config.get("base_url", "http://localhost:11434")
+            if main_provider == "ollama":
+                host = config.get("base_url", "http://localhost:11434")
+            else:
+                host = "http://localhost:11434"
         return OllamaEmbedder(model=embed_model, host=host)
  
     elif embed_provider == "openai-compatible":
         base_url = config.get("embedding_base_url", "").strip()
         if not base_url:
-            base_url = config.get("base_url", "https://api.openai.com/v1")
+            if main_provider == "openai-compatible":
+                base_url = config.get("base_url", "https://api.openai.com/v1")
+            else:
+                base_url = "https://api.openai.com/v1"
         api_key = config.get("api_key", "")
         return OpenAICompatibleEmbedder(model=embed_model, base_url=base_url, api_key=api_key)
  

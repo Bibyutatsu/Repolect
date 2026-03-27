@@ -25,10 +25,10 @@ def _init_provider():
         sys.exit(1)
  
  
-def _resolve_embeddings_flag(fallback: bool | None = None) -> bool:
+def _resolve_embeddings_flag() -> bool:
     """Decide whether to run embeddings.
     
-    Priority: env var → config file → fallback.
+    Priority: env var → config file.
     """
     raw = os.environ.get("REPOLECT_EMBEDDINGS", "").strip().lower()
     if raw in {"1", "true", "yes", "on"}:
@@ -36,21 +36,19 @@ def _resolve_embeddings_flag(fallback: bool | None = None) -> bool:
     if raw in {"0", "false", "no", "off"}:
         return False
     # Check config: embeddings are ON if an embedding provider is configured
-    if fallback is None:
-        from .config import load_config
-        config = load_config()
-        embed_provider = config.get("embedding_provider", "").strip()
-        embed_model = config.get("embedding_model", "").strip()
-        if embed_provider and embed_model:
-            return True
-        click.echo(
-            "⚠ Embedding not configured in config.yaml "
-            "(embedding_provider / embedding_model are empty). "
-            "Running without embeddings.",
-            err=True,
-        )
-        return False
-    return fallback
+    from .config import load_config
+    config = load_config()
+    embed_provider = config.get("embedding_provider", "").strip()
+    embed_model = config.get("embedding_model", "").strip()
+    if embed_provider and embed_model:
+        return True
+    click.echo(
+        "⚠ Embedding not configured in config.yaml "
+        "(embedding_provider / embedding_model are empty). "
+        "Running without embeddings.",
+        err=True,
+    )
+    return False
  
  
 @click.group()
@@ -151,8 +149,8 @@ def _analyze_one(
     has_git = is_git_repo(repo_root)
     repo_name = get_repo_name(repo_root) if has_git else Path(repo_root).name
     git_commit = get_current_commit(repo_root) if (has_git and not no_git) else ""
-    embeddings_enabled = _resolve_embeddings_flag(fallback=False)
- 
+    embeddings_enabled = _resolve_embeddings_flag()
+
     if not force and tree_exists(repo_root, branch=branch):
         existing_meta = load_meta(repo_root, branch=branch)
         if existing_meta and git_commit and existing_meta.git_commit == git_commit:
@@ -240,7 +238,10 @@ def _analyze_one(
     if not quiet:
         with tqdm(total=node_count, desc="      Summarizing", unit="node", dynamic_ncols=True) as bar:
             last = [0]
-            def on_summary_progress(current, total, title):
+            def on_summary_progress(current, total, title, summary):
+                if summary and summary.startswith("[summary unavailable:"):
+                    bar.write(f"      ⚠ Error summarizing '{title}': {summary}")
+                
                 postfix = title[-30:] if title else ""
                 if cache:
                     postfix += f" | H:{cache.hits} M:{cache.misses}"
@@ -317,7 +318,10 @@ def _analyze_one(
         )
         if gen_installed:
             click.echo(f"      Generated {len(gen_installed)} community skills")
- 
+
+    from .git_utils import ensure_gitignored
+    ensure_gitignored(repo_root, [".claude/", ".cursor/", ".agents/", "REPOLECT.md"])
+
     graph.close()
  
     click.echo(f"\nDone in {duration:.0f}s -- {node_count} symbols indexed across {file_count} files")
@@ -464,7 +468,7 @@ def sync(repo, parse_workers, num_workers, quiet, no_cache):
         migrate_legacy_index(repo_root, branch)
     root = load_tree(repo_root, branch=branch)
     meta = load_meta(repo_root, branch=branch)
-    embeddings_enabled = _resolve_embeddings_flag(fallback=bool(meta and meta.embeddings_enabled))
+    embeddings_enabled = _resolve_embeddings_flag()
  
     start_time = time.time()
  
@@ -550,7 +554,10 @@ def sync(repo, parse_workers, num_workers, quiet, no_cache):
             if not quiet:
                 with tqdm(total=len(to_update), desc="      Summarizing", unit="node", dynamic_ncols=True) as bar:
                     last = [0]
-                    def on_progress(current, total, title):
+                    def on_progress(current, total, title, summary):
+                        if summary and summary.startswith("[summary unavailable:"):
+                            bar.write(f"      ⚠ Error summarizing '{title}': {summary}")
+                        
                         postfix = title[-30:] if title else ""
                         if cache:
                             postfix += f" | H:{cache.hits} M:{cache.misses}"
@@ -607,6 +614,9 @@ def sync(repo, parse_workers, num_workers, quiet, no_cache):
     static_installed = install_static_skills(repo_root)
     if static_installed:
         click.echo(f"      Refreshed {len(static_installed)} agent skills")
+
+    from .git_utils import ensure_gitignored
+    ensure_gitignored(repo_root, [".claude/", ".cursor/", ".agents/", "REPOLECT.md"])
  
     if graph:
         graph.close()

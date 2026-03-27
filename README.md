@@ -16,6 +16,28 @@ Ask questions, trace execution flows, plan changes, analyze impact — all local
  
 ---
  
+## Who is this for?
+ 
+Repolect is built primarily for:
+ 
+- 🧠 **Developers exploring new code:** Quickly understand a project's architecture and logic better without reading thousands of lines of code.
+- 🤖 **AI Coding Agent Users:** Supercharge agents (like Cursor, Claude Code) with precise structural context to improve edit performance and significantly reduce hallucinations.
+- 📊 **Local-First Enthusiasts:** Index, query, and beautifully visualize your codebase's dependencies entirely locally.
+- ⚡ **SLM Power Users:** Maximize the potential of locally hosted Small Language Models (via Ollama) to autonomously analyze, edit, and update your codebases.
+ 
+---
+ 
+## Features
+ 
+- 🌳 **Hierarchical Semantic Tree:** Every node (module, file, class, function) gets a bottom-up LLM-generated summary. The abstract meaning of your codebase is indexed, not just the raw text.
+- 🎯 **Vectorless Search:** Navigate the semantic tree using LLM reasoning (in **O(log N)** steps). Finds actual answers, saving huge amounts of tokens compared to blind similarity searches.
+- 🕸️ **Knowledge Graph:** Maps `CALLS`, `IMPORTS`, `EXTENDS`, and `IMPLEMENTS` relations across your codebase. Useful for tracing execution paths or finding the "blast radius" of a change.
+- 🔌 **Full MCP Integration:** Exposes 14 powerful tools to AI editors (Cursor, Claude Code etc) out of the box, drastically reducing token usage and round trips.
+- 🛡️ **Prescriptive Agent Context:** Generates "Agent Skills" depending on functional groups (Louvain communities) in your code to inject targeted context when and where it's needed.
+- 🔒 **Local-First & SLM Optimized:** Engineered to run perfectly on efficient local models like `qwen3.5` or `qwen2.5-coder` via Ollama. No data leaves your machine unless you want it to.
+ 
+---
+ 
 ## How It Works
  
 Repolect builds a hierarchical tree of your codebase where every node — module, file, class, function — gets an LLM-generated summary. Queries navigate this tree using LLM reasoning, finding relevant code in **O(log N)** steps without any vector similarity search.
@@ -64,7 +86,17 @@ flowchart LR
  
 ## Quick Start
  
-### Install from PyPI
+### Recommended: Automated Installer
+ 
+The easiest way to install Repolect, optionally set up Ollama, and configure your LLM provider is using the interactive install script:
+ 
+```bash
+curl -fsSL https://raw.githubusercontent.com/Bibyutatsu/Repolect/main/install.sh | bash
+```
+ 
+### Install from PyPI (Manual)
+ 
+If you prefer to install manually using `pip`:
  
 ```bash
 pip install repolect[all]

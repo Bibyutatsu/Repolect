@@ -25,6 +25,7 @@ STATIC_SKILLS_DIR = Path(__file__).parent / "skills"
  
 CURSOR_RULES_DIR = ".cursor/rules"
 CLAUDE_SKILLS_DIR = ".claude/skills/repolect"
+ANTIGRAVITY_SKILLS_DIR = ".agents/workflows"
  
 SKILL_FILES = [
     "exploring.md",
@@ -38,12 +39,21 @@ SKILL_FILES = [
 def _detect_editors(repo_root: Path) -> list[str]:
     """Detect which editors have config in this repo or globally."""
     editors: list[str] = []
-    if (repo_root / ".cursor").exists() or (Path.home() / ".cursor").exists():
+    
+    if (repo_root / ".cursor").exists() or (Path.home() / ".cursor").exists() or (repo_root / ".cursorrules").exists():
         editors.append("cursor")
+        
     if (repo_root / ".claude").exists() or (Path.home() / ".claude").exists():
         editors.append("claude")
-    if not editors:
-        editors.append("cursor")
+        
+    if (
+        (repo_root / ".gemini").exists() or 
+        (repo_root / ".agents").exists() or 
+        (repo_root / "_agents").exists() or 
+        (Path.home() / ".gemini").exists()
+    ):
+        editors.append("antigravity")
+        
     return editors
  
  
@@ -94,6 +104,17 @@ description: "{desc}"
 """
  
  
+def _to_antigravity_skill(frontmatter: dict[str, str], body: str) -> str:
+    """Convert a skill file into Antigravity workflow format."""
+    desc = frontmatter.get("description", "Repolect agent skill")
+    return f"""---
+description: {desc}
+---
+
+{body}
+"""
+ 
+ 
 def install_static_skills(repo_root: str | Path) -> list[str]:
     """Install static skill files into detected editor directories.
  
@@ -120,6 +141,13 @@ def install_static_skills(repo_root: str | Path) -> list[str]:
                 target_dir.mkdir(parents=True, exist_ok=True)
                 target = target_dir / f"{stem}.md"
                 target.write_text(_to_claude_skill(frontmatter, body), encoding="utf-8")
+                installed.append(str(target.relative_to(repo_root)))
+
+            elif editor == "antigravity":
+                target_dir = repo_root / ANTIGRAVITY_SKILLS_DIR
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target = target_dir / f"repolect-{stem}.md"
+                target.write_text(_to_antigravity_skill(frontmatter, body), encoding="utf-8")
                 installed.append(str(target.relative_to(repo_root)))
  
     logger.info("Installed %d static skills for editors: %s", len(installed), ", ".join(editors))
@@ -156,6 +184,13 @@ def install_generated_skill(
             target = target_dir / f"{slug}.md"
             target.write_text(_to_claude_skill(frontmatter, body), encoding="utf-8")
             installed.append(str(target.relative_to(repo_root)))
+
+        elif editor == "antigravity":
+            target_dir = repo_root / ANTIGRAVITY_SKILLS_DIR
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / f"repolect-area-{slug}.md"
+            target.write_text(_to_antigravity_skill(frontmatter, body), encoding="utf-8")
+            installed.append(str(target.relative_to(repo_root)))
  
     return installed
  
@@ -175,6 +210,12 @@ def clean_generated_skills(repo_root: str | Path) -> int:
     if claude_gen_dir.exists():
         shutil.rmtree(claude_gen_dir)
         removed += 1
+
+    anti_dir = repo_root / ANTIGRAVITY_SKILLS_DIR
+    if anti_dir.exists():
+        for f in anti_dir.glob("repolect-area-*.md"):
+            f.unlink()
+            removed += 1
  
     return removed
  

@@ -208,3 +208,9 @@ __marimo__/
 .DS_Store
 
 .repolect/
+
+# Repolect artifacts
+.claude/
+.cursor/
+.agents/
+REPOLECT.md

@@ -48,6 +48,9 @@ repolect = "repolect.cli:cli"
  
 [tool.setuptools.packages.find]
 include = ["repolect*"]
+
+[tool.setuptools.package-data]
+"repolect" = ["skills/*.md"]
  
 [tool.black]
 line-length = 100

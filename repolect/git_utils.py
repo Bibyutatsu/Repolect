@@ -251,4 +251,38 @@ def get_file_authors(repo_root: str | Path, file_path: str | Path) -> list[str]:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return []
- 
+
+
+def ensure_gitignored(repo_root: str | Path, paths: list[str]) -> None:
+    """Ensure specific paths are added to the repository's .gitignore.
+    
+    Robustly handles both with/without leading slashes and prevents duplicates.
+    """
+    gitignore_path = Path(repo_root) / ".gitignore"
+    if not gitignore_path.exists():
+        return
+        
+    try:
+        content = gitignore_path.read_text(encoding="utf-8")
+        existing_lines = [line.strip() for line in content.splitlines()]
+        
+        # Norm function to compare paths robustly
+        def norm(p): return p.lstrip("/").rstrip("/")
+        
+        existing_norms = {norm(line) for line in existing_lines if line and not line.startswith("#")}
+        
+        missing = []
+        for p in paths:
+            if norm(p) not in existing_norms:
+                missing.append(p)
+                
+        if missing:
+            with gitignore_path.open("a", encoding="utf-8") as f:
+                if content and not content.endswith("\n"):
+                    f.write("\n")
+                if not any("# Repolect" in line for line in existing_lines):
+                    f.write("\n# Repolect artifacts\n")
+                for p in missing:
+                    f.write(f"{p}\n")
+    except (IOError, OSError):
+        pass

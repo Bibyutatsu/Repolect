@@ -534,13 +534,14 @@ class LLMDiskCache:
         return hashlib.sha256(raw.encode()).hexdigest()
  
     def get(self, key: str) -> str | None:
-        row = self._conn.execute(
-            "SELECT v FROM cache WHERE k = ?", (key,)
-        ).fetchone()
-        if row:
-            self.hits += 1
-            return row[0]
-        self.misses += 1
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT v FROM cache WHERE k = ?", (key,)
+            ).fetchone()
+            if row:
+                self.hits += 1
+                return row[0]
+            self.misses += 1
         return None
  
     def put(self, key: str, value: str) -> None:
@@ -561,8 +562,9 @@ class LLMDiskCache:
         self._conn.close()
  
     def __len__(self) -> int:
-        row = self._conn.execute("SELECT COUNT(*) FROM cache").fetchone()
-        return row[0] if row else 0
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM cache").fetchone()
+            return row[0] if row else 0
  
     def purge_errors(self, sentinel: str = "[summary unavailable:") -> int:
         """Delete cached values that are LLM error responses."""
