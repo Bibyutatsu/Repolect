@@ -1,406 +1,406 @@
 #!/usr/bin/env bash
 # Repolect installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/Bibyutatsu/Repolect/main/install.sh | bash
- 
+ 
 set -e
- 
+ 
 # ── Helpers ──────────────────────────────────────────────────────────────────
- 
+ 
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
- 
-info()    { printf "${BLUE}  ▸${NC} %s\n" "$*"; }
-success() { printf "${GREEN}  ✓${NC} %s\n" "$*"; }
-warn()    { printf "${YELLOW}  ⚠${NC} %s\n" "$*"; }
-error()   { printf "${RED}  ✗${NC} %s\n" "$*" >&2; exit 1; }
- 
+ 
+info()    { printf "${BLUE}  ▸${NC} %s\n" "$*"; }
+success() { printf "${GREEN}  ✓${NC} %s\n" "$*"; }
+warn()    { printf "${YELLOW}  ⚠${NC} %s\n" "$*"; }
+error()   { printf "${RED}  ✗${NC} %s\n" "$*" >&2; exit 1; }
+ 
 prompt_input() {
-    local prompt="$1"
-    local default="$2"
-    local result=""
-    if [ -n "$default" ]; then
-        printf "${BOLD}  %s${NC} [${GREEN}%s${NC}]: " "$prompt" "$default" > /dev/tty
-    else
-        printf "${BOLD}  %s${NC}: " "$prompt" > /dev/tty
-    fi
-    read -r result < /dev/tty
-    echo "${result:-$default}"
+    local prompt="$1"
+    local default="$2"
+    local result=""
+    if [ -n "$default" ]; then
+        printf "${BOLD}  %s${NC} [${GREEN}%s${NC}]: " "$prompt" "$default" > /dev/tty
+    else
+        printf "${BOLD}  %s${NC}: " "$prompt" > /dev/tty
+    fi
+    read -r result < /dev/tty
+    echo "${result:-$default}"
 }
- 
+ 
 prompt_secret() {
-    local prompt="$1"
-    local result=""
-    printf "${BOLD}  %s${NC}: " "$prompt" > /dev/tty
-    read -rs result < /dev/tty
-    echo "" > /dev/tty
-    echo "$result"
+    local prompt="$1"
+    local result=""
+    printf "${BOLD}  %s${NC}: " "$prompt" > /dev/tty
+    read -rs result < /dev/tty
+    echo "" > /dev/tty
+    echo "$result"
 }
- 
+ 
 prompt_yn() {
-    local prompt="$1"
-    local default="$2"
-    local result
-    result=$(prompt_input "$prompt (y/n)" "$default")
-    case "$result" in
-        [yY]|[yY][eE][sS]) return 0 ;;
-        *) return 1 ;;
-    esac
+    local prompt="$1"
+    local default="$2"
+    local result
+    result=$(prompt_input "$prompt (y/n)" "$default")
+    case "$result" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
 }
- 
+ 
 # ── Checks ───────────────────────────────────────────────────────────────────
- 
+ 
 check_python() {
-    if command -v python3 &> /dev/null; then
-        PY="python3"
-    elif command -v python &> /dev/null; then
-        PY="python"
-    else
-        error "Python 3 not found. Install Python 3.10+ and try again."
-    fi
- 
-    PY_VERSION=$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    PY_MAJOR=$($PY -c 'import sys; print(sys.version_info.major)')
-    PY_MINOR=$($PY -c 'import sys; print(sys.version_info.minor)')
- 
-    if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
-        error "Python 3.10+ required (found $PY_VERSION)"
-    fi
- 
-    success "Python $PY_VERSION found"
+    if command -v python3 &> /dev/null; then
+        PY="python3"
+    elif command -v python &> /dev/null; then
+        PY="python"
+    else
+        error "Python 3 not found. Install Python 3.10+ and try again."
+    fi
+ 
+    PY_VERSION=$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    PY_MAJOR=$($PY -c 'import sys; print(sys.version_info.major)')
+    PY_MINOR=$($PY -c 'import sys; print(sys.version_info.minor)')
+ 
+    if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
+        error "Python 3.10+ required (found $PY_VERSION)"
+    fi
+ 
+    success "Python $PY_VERSION found"
 }
- 
+ 
 check_pip() {
-    if ! $PY -m pip --version &> /dev/null; then
-        error "pip not found. Install pip and try again."
-    fi
-    success "pip found"
+    if ! $PY -m pip --version &> /dev/null; then
+        error "pip not found. Install pip and try again."
+    fi
+    success "pip found"
 }
- 
+ 
 check_ollama() {
-    if command -v ollama &> /dev/null; then
-        return 0
-    fi
-    return 1
+    if command -v ollama &> /dev/null; then
+        return 0
+    fi
+    return 1
 }
- 
+ 
 # ── Ollama helpers ───────────────────────────────────────────────────────────
- 
+ 
 install_ollama() {
-    if check_ollama; then
-        success "Ollama already installed"
-        return
-    fi
- 
-    info "Installing Ollama..."
-    curl -fsSL https://ollama.com/install.sh | sh
-    success "Ollama installed"
+    if check_ollama; then
+        success "Ollama already installed"
+        return
+    fi
+ 
+    info "Installing Ollama..."
+    curl -fsSL https://ollama.com/install.sh | sh
+    success "Ollama installed"
 }
- 
+ 
 start_ollama() {
-    if curl -s http://localhost:11434/api/tags &> /dev/null; then
-        success "Ollama is running"
-        return
-    fi
- 
-    info "Starting Ollama..."
-    ollama serve &> /dev/null &
- 
-    for i in $(seq 1 30); do
-        if curl -s http://localhost:11434/api/tags &> /dev/null; then
-            success "Ollama is running"
-            return
-        fi
-        sleep 1
-    done
- 
-    error "Ollama failed to start. Run 'ollama serve' manually."
+    if curl -s http://localhost:11434/api/tags &> /dev/null; then
+        success "Ollama is running"
+        return
+    fi
+ 
+    info "Starting Ollama..."
+    ollama serve &> /dev/null &
+ 
+    for i in $(seq 1 30); do
+        if curl -s http://localhost:11434/api/tags &> /dev/null; then
+            success "Ollama is running"
+            return
+        fi
+        sleep 1
+    done
+ 
+    error "Ollama failed to start. Run 'ollama serve' manually."
 }
- 
+ 
 pull_model() {
-    local model="$1"
-    local label="$2"
- 
-    if ollama list 2>/dev/null | grep -q "^${model}"; then
-        success "$label model '$model' already available"
-        return
-    fi
- 
-    info "Pulling $label model: $model (this may take a few minutes)..."
-    ollama pull "$model"
-    success "$label model '$model' ready"
+    local model="$1"
+    local label="$2"
+ 
+    if ollama list 2>/dev/null | grep -q "^${model}"; then
+        success "$label model '$model' already available"
+        return
+    fi
+ 
+    info "Pulling $label model: $model (this may take a few minutes)..."
+    ollama pull "$model"
+    success "$label model '$model' ready"
 }
- 
+ 
 # ── Config writer ────────────────────────────────────────────────────────────
- 
+ 
 write_config() {
-    local config_dir="$HOME/.repolect"
-    local config_file="$config_dir/config.yaml"
- 
-    mkdir -p "$config_dir"
-    cat > "$config_file" << EOF
+    local config_dir="$HOME/.repolect"
+    local config_file="$config_dir/config.yaml"
+ 
+    mkdir -p "$config_dir"
+    cat > "$config_file" << EOF
 # Repolect configuration
 # Generated by install.sh
- 
+ 
 # LLM provider: "ollama" or "openai-compatible"
 provider: $1
 base_url: $2
 model_name: $3
 api_key: $4
- 
+ 
 # LLM call defaults
 temperature: 0.1
 max_tokens: 200
 timeout: 60
- 
+ 
 # Embeddings (leave empty to disable)
 embedding_provider: $5
 embedding_model: $6
 embedding_base_url: $7
 EOF
- 
-    success "Config saved to $config_file"
+ 
+    success "Config saved to $config_file"
 }
- 
+ 
 # ── Gitignore helper ─────────────────────────────────────────────────────────
- 
+ 
 ensure_gitignore() {
-    local gitignore=".gitignore"
-    local entry=".repolect/"
- 
-    if [ ! -f "$gitignore" ]; then
-        echo "$entry" > "$gitignore"
-        success "Created $gitignore with $entry"
-        return
-    fi
- 
-    if grep -qxF "$entry" "$gitignore" 2>/dev/null; then
-        success "$entry already in $gitignore"
-        return
-    fi
- 
-    echo "" >> "$gitignore"
-    echo "$entry" >> "$gitignore"
-    success "Added $entry to $gitignore"
+    local gitignore=".gitignore"
+    local entry=".repolect/"
+ 
+    if [ ! -f "$gitignore" ]; then
+        echo "$entry" > "$gitignore"
+        success "Created $gitignore with $entry"
+        return
+    fi
+ 
+    if grep -qxF "$entry" "$gitignore" 2>/dev/null; then
+        success "$entry already in $gitignore"
+        return
+    fi
+ 
+    echo "" >> "$gitignore"
+    echo "$entry" >> "$gitignore"
+    success "Added $entry to $gitignore"
 }
- 
+ 
 # ── Main ─────────────────────────────────────────────────────────────────────
- 
+ 
 main() {
-    echo ""
-    printf "${BOLD}  🧠 Repolect Installer${NC}\n"
-    printf "  Vectorless code intelligence for any codebase\n"
-    echo ""
- 
-    # ── Prerequisites ────────────────────────────────────────────────────────
- 
-    check_python
-    check_pip
-    echo ""
- 
-    # ── Step 1: LLM Provider ─────────────────────────────────────────────────
- 
-    printf "${BOLD}  Step 1: Choose your LLM provider${NC}\n"
-    printf "    ${GREEN}1)${NC} Ollama   — Free, private, runs locally\n"
-    printf "    ${GREEN}2)${NC} OpenAI-compatible  — Any OpenAI-compatible API (OpenAI, Azure, etc.)\n"
-    echo ""
-    PROVIDER_CHOICE=$(prompt_input "Select provider" "1")
- 
-    EXTRAS=""
-    WRITE_CONFIG=true
-    SHOW_CONFIG_INSTRUCTIONS=false
- 
-    case "$PROVIDER_CHOICE" in
-        1|ollama)
-            PROVIDER="ollama"
-            EXTRAS="ollama"
- 
-            echo ""
-            install_ollama
-            start_ollama
- 
-            echo ""
-            info "Choose an LLM model for code analysis."
-            info "Browse models at: https://ollama.com/search"
-            LLM_MODEL=$(prompt_input "Model name" "qwen3.5:4b")
-            pull_model "$LLM_MODEL" "LLM"
- 
-            BASE_URL="http://localhost:11434"
-            API_KEY=""
- 
-            echo ""
-            if prompt_yn "Configure embeddings for semantic search?" "y"; then
-                info "Choose an embedding model for semantic search."
-                EMBED_MODEL=$(prompt_input "Embedding model" "qwen3-embedding:0.6b")
-                pull_model "$EMBED_MODEL" "Embedding"
-                EMBED_PROVIDER="ollama"
-                EMBED_BASE_URL=""
-            else
-                warn "Skipping embedding config. You can add it later in ~/.repolect/config.yaml"
-                EMBED_MODEL=""
-                EMBED_PROVIDER=""
-                EMBED_BASE_URL=""
-            fi
-            ;;
- 
-        2|openai*)
-            PROVIDER="openai-compatible"
-            EXTRAS=""
- 
-            echo ""
-            printf "${BOLD}  How would you like to configure your provider?${NC}\n"
-            printf "    ${GREEN}1)${NC} Enter config via CLI now\n"
-            printf "    ${GREEN}2)${NC} I'll create my own config file\n"
-            echo ""
-            CONFIG_CHOICE=$(prompt_input "Select" "1")
- 
-            case "$CONFIG_CHOICE" in
-                1|cli*)
-                    echo ""
-                    info "Configure your OpenAI-compatible LLM provider:"
-                    BASE_URL=$(prompt_input "Base URL" "https://api.openai.com/v1")
-                    LLM_MODEL=$(prompt_input "Model name" "gpt-4o-mini")
-                    API_KEY=$(prompt_secret "API key")
-                    echo ""
- 
-                    if [ -z "$API_KEY" ]; then
-                        warn "No API key provided. Set it later in ~/.repolect/config.yaml"
-                    fi
- 
-                    echo ""
-                    if prompt_yn "Configure embeddings for semantic search?" "y"; then
-                        EMBED_PROVIDER="openai-compatible"
-                        EMBED_BASE_URL=$(prompt_input "Embedding API base URL" "$BASE_URL")
-                        EMBED_MODEL=$(prompt_input "Embedding model name" "text-embedding-3-small")
-                    else
-                        warn "Skipping embedding config. You can add it later in ~/.repolect/config.yaml"
-                        EMBED_PROVIDER=""
-                        EMBED_MODEL=""
-                        EMBED_BASE_URL=""
-                    fi
-                    ;;
- 
-                2|manual*)
-                    WRITE_CONFIG=false
-                    SHOW_CONFIG_INSTRUCTIONS=true
-                    LLM_MODEL=""
-                    BASE_URL=""
-                    API_KEY=""
-                    EMBED_PROVIDER=""
-                    EMBED_MODEL=""
-                    EMBED_BASE_URL=""
-                    ;;
- 
-                *)
-                    error "Invalid option: $CONFIG_CHOICE. Choose 1 or 2."
-                    ;;
-            esac
-            ;;
- 
-        *)
-            error "Invalid option: $PROVIDER_CHOICE. Choose 1 or 2."
-            ;;
-    esac
- 
-    # ── Step 2: Optional Extras ──────────────────────────────────────────────
- 
-    echo ""
-    printf "${BOLD}  Step 2: Optional extras${NC}\n"
-    echo ""
- 
-    if prompt_yn "Install FalkorDB graph backend? (recommended)" "y"; then
-        EXTRAS="${EXTRAS},graph"
-    fi
- 
-    if prompt_yn "Install visualization (Streamlit graph explorer)?" "y"; then
-        EXTRAS="${EXTRAS},viz"
-    fi
- 
-    # Clean up leading comma if EXTRAS started empty
-    EXTRAS=$(echo "$EXTRAS" | sed 's/^,//')
- 
-    # ── Step 3: Install Repolect ────────────────────────────────────────────
- 
-    echo ""
-    printf "${BOLD}  Step 3: Installing Repolect${NC}\n"
-    echo ""
- 
-    if [ -n "$EXTRAS" ]; then
-        info "Installing repolect[$EXTRAS]..."
-        $PY -m pip install --upgrade "repolect[$EXTRAS]" 2>/dev/null || \
-        $PY -m pip install --upgrade "git+https://github.com/Bibyutatsu/Repolect.git#egg=repolect[$EXTRAS]" 2>/dev/null || \
-        $PY -m pip install --upgrade -e ".[$EXTRAS]" 2>/dev/null || \
-        error "Failed to install Repolect. Check your Python environment."
-    else
-        info "Installing repolect..."
-        $PY -m pip install --upgrade repolect 2>/dev/null || \
-        $PY -m pip install --upgrade git+https://github.com/Bibyutatsu/Repolect.git 2>/dev/null || \
-        $PY -m pip install --upgrade -e . 2>/dev/null || \
-        error "Failed to install Repolect. Check your Python environment."
-    fi
-    success "Repolect installed"
- 
-    # ── Step 4: Gitignore ────────────────────────────────────────────────────
- 
-    ensure_gitignore
- 
-    # ── Step 5: Write config ─────────────────────────────────────────────────
- 
-    if [ "$WRITE_CONFIG" = true ]; then
-        echo ""
-        write_config \
-            "$PROVIDER" \
-            "$BASE_URL" \
-            "$LLM_MODEL" \
-            "$API_KEY" \
-            "$EMBED_PROVIDER" \
-            "$EMBED_MODEL" \
-            "$EMBED_BASE_URL"
-    fi
- 
-    # ── Done ─────────────────────────────────────────────────────────────────
- 
-    echo ""
-    printf "${GREEN}${BOLD}  ✅ Repolect is ready!${NC}\n"
-    echo ""
-    printf "  ${BOLD}Quick start:${NC}\n"
-    printf "    cd your-project/\n"
-    printf "    repolect analyze\n"
-    printf "    repolect ask \"how does authentication work?\"\n"
- 
-    if echo "$EXTRAS" | grep -q "viz"; then
-        printf "    repolect viz          # launch graph explorer\n"
-    fi
- 
-    echo ""
-    printf "  ${BOLD}Config:${NC}  ~/.repolect/config.yaml\n"
-    printf "  ${BOLD}Docs:${NC}    https://github.com/Bibyutatsu/Repolect\n"
- 
-    if [ "$SHOW_CONFIG_INSTRUCTIONS" = true ]; then
-        echo ""
-        printf "${YELLOW}${BOLD}  ⚠  You chose to create your own config. Run these commands:${NC}\n"
-        echo ""
-        printf "    mkdir -p ~/.repolect\n"
-        printf "    cat > ~/.repolect/config.yaml << 'EOF'\n"
-        printf "    # Repolect configuration\n"
-        printf "    provider: openai-compatible\n"
-        printf "    base_url: https://api.openai.com/v1\n"
-        printf "    model_name: gpt-4o-mini\n"
-        printf "    api_key: YOUR_API_KEY\n"
-        printf "    temperature: 0.1\n"
-        printf "    max_tokens: 200\n"
-        printf "    timeout: 60\n"
-        printf "    embedding_provider: openai-compatible\n"
-        printf "    embedding_model: text-embedding-3-small\n"
-        printf "    embedding_base_url: https://api.openai.com/v1\n"
-        printf "    EOF\n"
-    fi
- 
-    echo ""
+    echo ""
+    printf "${BOLD}  🧠 Repolect Installer${NC}\n"
+    printf "  Vectorless code intelligence for any codebase\n"
+    echo ""
+ 
+    # ── Prerequisites ────────────────────────────────────────────────────────
+ 
+    check_python
+    check_pip
+    echo ""
+ 
+    # ── Step 1: LLM Provider ─────────────────────────────────────────────────
+ 
+    printf "${BOLD}  Step 1: Choose your LLM provider${NC}\n"
+    printf "    ${GREEN}1)${NC} Ollama   — Free, private, runs locally\n"
+    printf "    ${GREEN}2)${NC} OpenAI-compatible  — Any OpenAI-compatible API (OpenAI, Azure, etc.)\n"
+    echo ""
+    PROVIDER_CHOICE=$(prompt_input "Select provider" "1")
+ 
+    EXTRAS=""
+    WRITE_CONFIG=true
+    SHOW_CONFIG_INSTRUCTIONS=false
+ 
+    case "$PROVIDER_CHOICE" in
+        1|ollama)
+            PROVIDER="ollama"
+            EXTRAS="ollama"
+ 
+            echo ""
+            install_ollama
+            start_ollama
+ 
+            echo ""
+            info "Choose an LLM model for code analysis."
+            info "Browse models at: https://ollama.com/search"
+            LLM_MODEL=$(prompt_input "Model name" "qwen3.5:4b")
+            pull_model "$LLM_MODEL" "LLM"
+ 
+            BASE_URL="http://localhost:11434"
+            API_KEY=""
+ 
+            echo ""
+            if prompt_yn "Configure embeddings for semantic search?" "y"; then
+                info "Choose an embedding model for semantic search."
+                EMBED_MODEL=$(prompt_input "Embedding model" "qwen3-embedding:0.6b")
+                pull_model "$EMBED_MODEL" "Embedding"
+                EMBED_PROVIDER="ollama"
+                EMBED_BASE_URL=""
+            else
+                warn "Skipping embedding config. You can add it later in ~/.repolect/config.yaml"
+                EMBED_MODEL=""
+                EMBED_PROVIDER=""
+                EMBED_BASE_URL=""
+            fi
+            ;;
+ 
+        2|openai*)
+            PROVIDER="openai-compatible"
+            EXTRAS=""
+ 
+            echo ""
+            printf "${BOLD}  How would you like to configure your provider?${NC}\n"
+            printf "    ${GREEN}1)${NC} Enter config via CLI now\n"
+            printf "    ${GREEN}2)${NC} I'll create my own config file\n"
+            echo ""
+            CONFIG_CHOICE=$(prompt_input "Select" "1")
+ 
+            case "$CONFIG_CHOICE" in
+                1|cli*)
+                    echo ""
+                    info "Configure your OpenAI-compatible LLM provider:"
+                    BASE_URL=$(prompt_input "Base URL" "https://api.openai.com/v1")
+                    LLM_MODEL=$(prompt_input "Model name" "gpt-4o-mini")
+                    API_KEY=$(prompt_secret "API key")
+                    echo ""
+ 
+                    if [ -z "$API_KEY" ]; then
+                        warn "No API key provided. Set it later in ~/.repolect/config.yaml"
+                    fi
+ 
+                    echo ""
+                    if prompt_yn "Configure embeddings for semantic search?" "y"; then
+                        EMBED_PROVIDER="openai-compatible"
+                        EMBED_BASE_URL=$(prompt_input "Embedding API base URL" "$BASE_URL")
+                        EMBED_MODEL=$(prompt_input "Embedding model name" "text-embedding-3-small")
+                    else
+                        warn "Skipping embedding config. You can add it later in ~/.repolect/config.yaml"
+                        EMBED_PROVIDER=""
+                        EMBED_MODEL=""
+                        EMBED_BASE_URL=""
+                    fi
+                    ;;
+ 
+                2|manual*)
+                    WRITE_CONFIG=false
+                    SHOW_CONFIG_INSTRUCTIONS=true
+                    LLM_MODEL=""
+                    BASE_URL=""
+                    API_KEY=""
+                    EMBED_PROVIDER=""
+                    EMBED_MODEL=""
+                    EMBED_BASE_URL=""
+                    ;;
+ 
+                *)
+                    error "Invalid option: $CONFIG_CHOICE. Choose 1 or 2."
+                    ;;
+            esac
+            ;;
+ 
+        *)
+            error "Invalid option: $PROVIDER_CHOICE. Choose 1 or 2."
+            ;;
+    esac
+ 
+    # ── Step 2: Optional Extras ──────────────────────────────────────────────
+ 
+    echo ""
+    printf "${BOLD}  Step 2: Optional extras${NC}\n"
+    echo ""
+ 
+    if prompt_yn "Install FalkorDB graph backend? (recommended)" "y"; then
+        EXTRAS="${EXTRAS},graph"
+    fi
+ 
+    if prompt_yn "Install visualization (Streamlit graph explorer)?" "y"; then
+        EXTRAS="${EXTRAS},viz"
+    fi
+ 
+    # Clean up leading comma if EXTRAS started empty
+    EXTRAS=$(echo "$EXTRAS" | sed 's/^,//')
+ 
+    # ── Step 3: Install Repolect ────────────────────────────────────────────
+ 
+    echo ""
+    printf "${BOLD}  Step 3: Installing Repolect${NC}\n"
+    echo ""
+ 
+    if [ -n "$EXTRAS" ]; then
+        info "Installing repolect[$EXTRAS]..."
+        $PY -m pip install --upgrade "repolect[$EXTRAS]" 2>/dev/null || \
+        $PY -m pip install --upgrade "git+https://github.com/Bibyutatsu/Repolect.git#egg=repolect[$EXTRAS]" 2>/dev/null || \
+        $PY -m pip install --upgrade -e ".[$EXTRAS]" 2>/dev/null || \
+        error "Failed to install Repolect. Check your Python environment."
+    else
+        info "Installing repolect..."
+        $PY -m pip install --upgrade repolect 2>/dev/null || \
+        $PY -m pip install --upgrade git+https://github.com/Bibyutatsu/Repolect.git 2>/dev/null || \
+        $PY -m pip install --upgrade -e . 2>/dev/null || \
+        error "Failed to install Repolect. Check your Python environment."
+    fi
+    success "Repolect installed"
+ 
+    # ── Step 4: Gitignore ────────────────────────────────────────────────────
+ 
+    ensure_gitignore
+ 
+    # ── Step 5: Write config ─────────────────────────────────────────────────
+ 
+    if [ "$WRITE_CONFIG" = true ]; then
+        echo ""
+        write_config \
+            "$PROVIDER" \
+            "$BASE_URL" \
+            "$LLM_MODEL" \
+            "$API_KEY" \
+            "$EMBED_PROVIDER" \
+            "$EMBED_MODEL" \
+            "$EMBED_BASE_URL"
+    fi
+ 
+    # ── Done ─────────────────────────────────────────────────────────────────
+ 
+    echo ""
+    printf "${GREEN}${BOLD}  ✅ Repolect is ready!${NC}\n"
+    echo ""
+    printf "  ${BOLD}Quick start:${NC}\n"
+    printf "    cd your-project/\n"
+    printf "    repolect analyze\n"
+    printf "    repolect ask \"how does authentication work?\"\n"
+ 
+    if echo "$EXTRAS" | grep -q "viz"; then
+        printf "    repolect viz          # launch graph explorer\n"
+    fi
+ 
+    echo ""
+    printf "  ${BOLD}Config:${NC}  ~/.repolect/config.yaml\n"
+    printf "  ${BOLD}Docs:${NC}    https://github.com/Bibyutatsu/Repolect\n"
+ 
+    if [ "$SHOW_CONFIG_INSTRUCTIONS" = true ]; then
+        echo ""
+        printf "${YELLOW}${BOLD}  ⚠  You chose to create your own config. Run these commands:${NC}\n"
+        echo ""
+        printf "    mkdir -p ~/.repolect\n"
+        printf "    cat > ~/.repolect/config.yaml << 'EOF'\n"
+        printf "    # Repolect configuration\n"
+        printf "    provider: openai-compatible\n"
+        printf "    base_url: https://api.openai.com/v1\n"
+        printf "    model_name: gpt-4o-mini\n"
+        printf "    api_key: YOUR_API_KEY\n"
+        printf "    temperature: 0.1\n"
+        printf "    max_tokens: 200\n"
+        printf "    timeout: 60\n"
+        printf "    embedding_provider: openai-compatible\n"
+        printf "    embedding_model: text-embedding-3-small\n"
+        printf "    embedding_base_url: https://api.openai.com/v1\n"
+        printf "    EOF\n"
+    fi
+ 
+    echo ""
 }
- 
+ 
 main "$@"
- 
+ 
