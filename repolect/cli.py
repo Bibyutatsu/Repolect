@@ -842,10 +842,179 @@ def diff_cmd(ref, repo, with_impact, max_hops):
  
  
 @cli.command()
-def mcp():
-    """Start MCP server for AI editor integration (Claude Code, Cursor, Windsurf, etc.)."""
-    _start_mcp_server()
- 
+@click.option("--serve", is_flag=True,
+              help="Skip the setup menu and start the MCP server immediately.")
+@click.option("--scope", type=click.Choice(["global", "project"]), default="global",
+              show_default=True, help="Scope for auto-configuration (global or project).")
+def mcp(serve, scope):
+    """Configure and start the MCP server for AI editor integration.
+
+    Without --serve: shows the config snippet and offers to auto-configure
+    detected editors (Cursor, Claude Code, Antigravity, Windsurf, VS Code).
+
+    With --serve: starts the MCP stdio server immediately (for use in
+    mcp.json as the command field).
+    """
+    if serve:
+        _start_mcp_server()
+        return
+
+    import json
+    import shutil
+
+    home = Path.home()
+    cwd = Path.cwd()
+
+    # ── Resolve repolect binary ───────────────────────────────────────────────
+    repolect_bin = shutil.which("repolect") or sys.executable
+    if shutil.which("repolect"):
+        cmd_str = f'"{repolect_bin}" mcp'
+        cmd_list = {"command": repolect_bin, "args": ["mcp", "--serve"]}
+    else:
+        cmd_str = f'"{sys.executable}" -m repolect mcp'
+        cmd_list = {"command": sys.executable, "args": ["-m", "repolect", "mcp", "--serve"]}
+
+    # ── Step 1: Show config snippet ───────────────────────────────────────────
+    snippet = {
+        "mcpServers": {
+            "repolect": cmd_list,
+        }
+    }
+    click.echo()
+    click.echo("  🔌 Repolect MCP Server")
+    click.echo("  " + "─" * 52)
+    click.echo()
+    click.echo("  Add this to your editor's MCP config file:\n")
+    for line in json.dumps(snippet, indent=2).splitlines():
+        click.echo(f"    {line}")
+    click.echo()
+    click.echo(f"  Binary resolved to: {repolect_bin}")
+    click.echo()
+
+    # ── Step 2: Detect installed editors ─────────────────────────────────────
+    EDITOR_CONFIGS = [
+        {
+            "id": "cursor",
+            "name": "Cursor",
+            "detect": [home / ".cursor",
+                       home / "Library" / "Application Support" / "Cursor"],
+            "global_path": home / ".cursor" / "mcp.json",
+            "project_path": cwd / ".cursor" / "mcp.json",
+            "root_key": "mcpServers",
+        },
+        {
+            "id": "claude",
+            "name": "Claude Code",
+            "detect": [home / ".claude", home / ".config" / "claude"],
+            "global_path": home / ".claude.json",
+            "project_path": cwd / ".mcp.json",
+            "root_key": "mcpServers",
+        },
+        {
+            "id": "antigravity",
+            "name": "Antigravity (Gemini)",
+            "detect": [home / ".gemini", home / ".gemini" / "antigravity"],
+            "global_path": home / ".gemini" / "mcp.json",
+            "project_path": cwd / ".gemini" / "mcp.json",
+            "root_key": "mcpServers",
+        },
+        {
+            "id": "windsurf",
+            "name": "Windsurf",
+            "detect": [home / ".codeium",
+                       home / "Library" / "Application Support" / "Windsurf"],
+            "global_path": home / ".codeium" / "windsurf" / "mcp_config.json",
+            "project_path": cwd / ".windsurf" / "mcp.json",
+            "root_key": "mcpServers",
+        },
+        {
+            "id": "vscode",
+            "name": "VS Code (Copilot MCP)",
+            "detect": [home / ".vscode"],
+            "global_path": home / ".vscode" / "mcp.json",
+            "project_path": cwd / ".vscode" / "mcp.json",
+            "root_key": "servers",
+        },
+    ]
+
+    detected = [e for e in EDITOR_CONFIGS if any(d.exists() for d in e["detect"])]
+
+    # ── Step 3: Ask user to configure editors ─────────────────────────────────
+    click.echo("  " + "─" * 52)
+
+    if not detected:
+        click.echo("  ℹ  No supported AI editors detected on this machine.")
+        click.echo("  Copy the snippet above into your editor's MCP config file.")
+        click.echo()
+        return
+
+    name_list = "  ,  ".join(f"[{i+1}] {e['name']}" for i, e in enumerate(detected))
+    click.echo(f"  Detected editors:  {name_list}")
+    click.echo()
+    click.echo("  Enter numbers to auto-configure (e.g. 1,3), 'a' for all, or Enter to skip:")
+    raw = click.prompt("  →", default="", show_default=False).strip().lower()
+
+    if not raw:
+        click.echo()
+        click.echo("  Skipped. Copy the snippet above into your editor's MCP config manually.")
+        click.echo()
+        return
+
+    if raw in ("a", "all"):
+        chosen = detected
+    else:
+        indexes = []
+        for part in raw.replace(" ", "").split(","):
+            try:
+                idx = int(part) - 1
+                if 0 <= idx < len(detected):
+                    indexes.append(idx)
+            except ValueError:
+                pass
+        chosen = [detected[i] for i in indexes]
+
+    if not chosen:
+        click.echo("  ✗ No valid selection. Nothing written.")
+        return
+
+    # ── Step 4: Write config for chosen editors ───────────────────────────────
+    click.echo()
+    any_written = False
+    for ed in chosen:
+        config_path: Path = ed["project_path"] if scope == "project" else ed["global_path"]
+        root_key = ed["root_key"]
+
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        existing: dict = {}
+        if config_path.exists():
+            try:
+                existing = json.loads(config_path.read_text("utf-8"))
+            except (json.JSONDecodeError, OSError):
+                existing = {}
+
+        if root_key not in existing:
+            existing[root_key] = {}
+
+        already = existing[root_key].get("repolect") == cmd_list
+        existing[root_key]["repolect"] = cmd_list
+
+        try:
+            config_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+            status = "already up-to-date" if already else "✓ written"
+            click.echo(f"  {ed['name']}  →  {config_path}  [{status}]")
+            any_written = True
+        except OSError as exc:
+            click.echo(f"  {ed['name']}  →  ✗ Failed: {exc}", err=True)
+
+    if any_written:
+        click.echo()
+        click.echo("  ✅ Done! Restart your editor for changes to take effect.")
+        click.echo()
+        click.echo("  To start the server manually (for debugging):")
+        click.echo(f"    {cmd_str}")
+        click.echo()
+
  
 @cli.command()
 @click.option("--repo", default=None, help="Repo name or ID (if not in a repo)")

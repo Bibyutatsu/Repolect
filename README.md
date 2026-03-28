@@ -86,17 +86,25 @@ flowchart LR
  
 ## Quick Start
  
-### Recommended: Automated Installer
+### Recommended: One-liner Installer
  
-The easiest way to install Repolect, optionally set up Ollama, and configure your LLM provider is using the interactive install script:
+The interactive installer sets up Ollama, configures your LLM provider, and makes `repolect` available system-wide:
  
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Bibyutatsu/Repolect/main/install.sh | bash
 ```
  
-### Install from PyPI (Manual)
+The installer uses **[pipx](https://pipx.pypa.io)** (isolated environment, no dependency conflicts) with a `pip --user` fallback. It automatically updates your shell PATH via a Conda-style marker block in `.zshrc`/`.bashrc`.
  
-If you prefer to install manually using `pip`:
+### Install via pipx (recommended for CLI tools)
+ 
+```bash
+pipx install repolect
+pipx inject repolect ollama          # for Ollama support
+pipx inject repolect falkordblite    # for FalkorDB graph backend
+```
+ 
+### Install from PyPI
  
 ```bash
 pip install repolect[all]
@@ -136,7 +144,7 @@ repolect ask "how does authentication work?"
 | `repolect diff` | Map git changes to affected symbols | `--ref` (default HEAD~1), `--with-impact` |
 | `repolect communities` | Show functional clusters (Louvain) | `--repo` |
 | `repolect list` | List all indexed repositories | — |
-| `repolect mcp` | Start MCP server for AI editors | — |
+| `repolect mcp` | Configure editors + start MCP server | `--serve` (skip menu, start server directly), `--scope global\|project` |
 | `repolect viz` | Launch Streamlit graph explorer | `--port` (default 8501) |
  
 ---
@@ -145,53 +153,70 @@ repolect ask "how does authentication work?"
  
 The [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) lets AI editors use Repolect as a live code intelligence backend.
  
-```bash
-repolect mcp   # Start MCP server (stdio transport)
+### Auto-configure with `repolect mcp`
+ 
+Running `repolect mcp` opens an **interactive setup flow**:
+ 
+1. **Displays the config snippet** you can copy into any editor manually
+2. **Detects installed editors** (Cursor, Claude Code, Antigravity, Windsurf, VS Code)
+3. **Asks which to configure** — select by number or press `a` for all
+4. **Writes/merges** the correct JSON config into each editor automatically
+ 
 ```
- 
-<details>
-<summary><b>Cursor</b> — add to <code>~/.cursor/mcp.json</code></summary>
- 
-```json
-{
-  "mcpServers": {
-    "repolect": {
-      "command": "repolect",
-      "args": ["mcp"],
-      "env": {
-        "REPOLECT_REPO": "/path/to/your/project"
+$ repolect mcp
+
+  🔌 Repolect MCP Server
+  ────────────────────────────────────────────────────────
+
+  Add this to your editor's MCP config file:
+
+    {
+      "mcpServers": {
+        "repolect": {
+          "command": "/usr/local/bin/repolect",
+          "args": ["mcp", "--serve"]
+        }
       }
     }
-  }
-}
+
+  Binary resolved to: /usr/local/bin/repolect
+
+  ────────────────────────────────────────────────────────
+  Detected editors:  [1] Cursor  ,  [2] Antigravity (Gemini)
+
+  Enter numbers to auto-configure (e.g. 1,3), 'a' for all, or Enter to skip:
+  → a
+
+  Cursor  →  ~/.cursor/mcp.json  [✓ written]
+  Antigravity (Gemini)  →  ~/.gemini/mcp.json  [✓ written]
+
+  ✅ Done! Restart your editor for changes to take effect.
 ```
  
-</details>
- 
-<details>
-<summary><b>Claude Code</b></summary>
- 
-```bash
-claude mcp add repolect -- repolect mcp
-```
- 
-</details>
- 
-<details>
-<summary><b>Windsurf / Other MCP clients</b></summary>
+### Manual config (all editors use the same format)
  
 ```json
 {
   "mcpServers": {
     "repolect": {
       "command": "repolect",
-      "args": ["mcp"]
+      "args": ["mcp", "--serve"]
     }
   }
 }
 ```
  
-</details>
+| Editor | Config file |
+|--------|-------------|
+| **Cursor** (global) | `~/.cursor/mcp.json` |
+| **Cursor** (project) | `.cursor/mcp.json` |
+| **Claude Code** (global) | `~/.claude.json` → `mcpServers` |
+| **Claude Code** (project) | `.mcp.json` |
+| **Antigravity / Gemini** | `~/.gemini/mcp.json` |
+| **Windsurf** | `~/.codeium/windsurf/mcp_config.json` |
+| **VS Code (Copilot)** | `~/.vscode/mcp.json` → `servers` |
+ 
+> **`--serve` flag**: Use `args: ["mcp", "--serve"]` in your mcp.json. This skips the interactive menu and starts the stdio server directly — which is what editors need.
  
 ### MCP Tools
  
