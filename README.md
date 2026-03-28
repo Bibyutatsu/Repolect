@@ -2,9 +2,9 @@
  
 # Repolect
  
-**Semantic code intelligence powered by LLM reasoning.**
+**Stop searching for code. Start repolecting about it 😉.**
  
-Index any codebase into a hierarchical semantic tree + knowledge graph.
+Semantic code intelligence powered by LLM reasoning.
 Ask questions, trace execution flows, plan changes, analyze impact — all local-first, no vector database needed.
  
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
