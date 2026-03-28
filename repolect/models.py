@@ -104,6 +104,9 @@ class CodeNode:
         return f"CodeNode({self.kind}:{self.node_id} '{self.title}')"
  
  
+from .version import __version__
+
+
 @dataclass
 class TreeMeta:
     """Metadata stored alongside the tree. Used for change detection and registry."""
@@ -116,7 +119,7 @@ class TreeMeta:
     git_branch: str = ""        # branch name at index time
     file_count: int = 0
     language_stats: dict = field(default_factory=dict)   # {"python": 42, "js": 10}
-    repolect_version: str = "0.1.0"
+    repolect_version: str = __version__
     index_duration_seconds: float = 0.0
     embeddings_enabled: bool = False
     graph_backend: str = "networkx"

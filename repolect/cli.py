@@ -50,9 +50,11 @@ def _resolve_embeddings_flag() -> bool:
     )
     return False
  
- 
+from .version import __version__
+
+
 @click.group()
-@click.version_option("0.1.0")
+@click.version_option(__version__)
 def cli():
     """Repolect — Vectorless code intelligence for any codebase."""
     pass
