@@ -153,7 +153,8 @@ api_key: $4
  
 # LLM call defaults
 temperature: 0.1
-max_tokens: 200
+max_summarization_tokens: 400
+max_reasoning_tokens: 1000
 timeout: 60
  
 # Embeddings (leave empty to disable)
@@ -185,6 +186,39 @@ ensure_gitignore() {
     echo "" >> "$gitignore"
     echo "$entry" >> "$gitignore"
     success "Added $entry to $gitignore"
+}
+ 
+# ── Shell PATH helper ─────────────────────────────────────────────────────────
+ 
+setup_shell_path() {
+    # Detect the user script directory where pip installs binaries
+    local bin_dir
+    bin_dir=$($PY -c "import site, os; dirs = site.getusersitepackages(); base = os.path.dirname(os.path.dirname(dirs)); print(os.path.join(base, 'bin'))" 2>/dev/null || echo "$HOME/.local/bin")
+ 
+    # Determine which rc file to update
+    local rc_file
+    case "$(basename "${SHELL:-bash}")" in
+        zsh)  rc_file="$HOME/.zshrc" ;;
+        fish) rc_file="$HOME/.config/fish/config.fish" ;;
+        *)    rc_file="$HOME/.bashrc" ;;
+    esac
+ 
+    [ -f "$rc_file" ] || touch "$rc_file"
+ 
+    # Idempotent Conda-style marker block
+    if grep -q '# >>> repolect initialize >>>' "$rc_file" 2>/dev/null; then
+        success "Shell PATH already configured in $rc_file"
+    else
+        info "Adding Repolect to PATH in $rc_file"
+        cat >> "$rc_file" << SHELL_EOF
+ 
+# >>> repolect initialize >>>
+# !! Contents managed by Repolect installer — do not edit manually !!
+export PATH="${bin_dir}:\$PATH"
+# <<< repolect initialize <<<
+SHELL_EOF
+        warn "PATH updated. Run: source $rc_file  (or open a new terminal)"
+    fi
 }
  
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -342,6 +376,7 @@ main() {
         error "Failed to install Repolect. Check your Python environment."
     fi
     success "Repolect installed"
+    setup_shell_path
  
     # ── Step 4: Gitignore ────────────────────────────────────────────────────
  
