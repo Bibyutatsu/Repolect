@@ -1024,7 +1024,7 @@ def viz(repo, port):
     try:
         import streamlit  # noqa: F401
     except ImportError:
-        click.echo("Visualization requires extra dependencies. Install with:\n  pip install repolect[viz]", err=True)
+        click.echo("Visualization requires extra dependencies. Install with:\n  pipx inject repolect \"repolect[viz]\"  (if you used install.sh)\nOR\n  pip install \"repolect[viz]\"", err=True)
         sys.exit(1)
  
     repo_root = _resolve_repo(repo)
@@ -1134,7 +1134,7 @@ def _start_mcp_server() -> None:
         from .mcp_server import start_server
         start_server()
     except ImportError:
-        click.echo("MCP support not installed. Run: pip install repolect[mcp]", err=True)
+        click.echo("MCP support not installed. Run:\n  pipx inject repolect \"repolect[mcp]\"  (if you used install.sh)\nOR\n  pip install \"repolect[mcp]\"", err=True)
  
  
 if __name__ == "__main__":

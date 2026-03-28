@@ -1065,4 +1065,4 @@ def _try_falkordb(index_dir: Path) -> _FalkorDBBackend:
         except concurrent.futures.TimeoutError:
             raise RuntimeError("FalkorDBLite startup timed out (>10s)")
         except ImportError:
-            raise RuntimeError("FalkorDBLite not installed")
+            raise RuntimeError("FalkorDBLite support not installed. Run:\n  pipx inject repolect falkordblite  (if you used install.sh)\nOR\n  pip install falkordblite")

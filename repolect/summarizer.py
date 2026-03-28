@@ -211,7 +211,7 @@ class OllamaProvider(BaseLLM):
         try:
             import ollama as _ollama  # noqa: F401
         except ImportError:
-            raise ImportError("Run: pip install 'repolect[ollama]'")
+            raise ImportError("Ollama support not installed. Run:\n  pipx inject repolect \"repolect[ollama]\"  (if you used install.sh)\nOR\n  pip install \"repolect[ollama]\"")
  
         self.host = host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
         self.model = model or self.auto_select_model() or "qwen3.5:4b"
