@@ -153,7 +153,8 @@ api_key: $4
  
 # LLM call defaults
 temperature: 0.1
-max_tokens: 200
+max_summarization_tokens: 400
+max_reasoning_tokens: 1000
 timeout: 60
  
 # Embeddings (leave empty to disable)
@@ -185,6 +186,46 @@ ensure_gitignore() {
     echo "" >> "$gitignore"
     echo "$entry" >> "$gitignore"
     success "Added $entry to $gitignore"
+}
+ 
+# ── Shell PATH helper (pip --user fallback only) ─────────────────────────────
+ 
+setup_shell_path() {
+    # When pip --user is used, detect its bin dir and ensure it's on PATH.
+    # Not needed when pipx is used — pipx manages its own PATH via ensurepath.
+    local bin_dir="$HOME/.local/bin"
+ 
+    local rc_file
+    case "$(basename "${SHELL:-bash}")" in
+        zsh)  rc_file="$HOME/.zshrc" ;;
+        fish) rc_file="$HOME/.config/fish/config.fish" ;;
+        *)    rc_file="$HOME/.bashrc" ;;
+    esac
+ 
+    [ -f "$rc_file" ] || touch "$rc_file"
+ 
+    # Idempotent Conda-style marker block
+    if grep -q '# >>> repolect initialize >>>' "$rc_file" 2>/dev/null; then
+        success "Shell PATH already configured in $rc_file"
+    else
+        info "Adding ~/.local/bin to PATH in $rc_file"
+        cat >> "$rc_file" << 'REOF'
+ 
+# >>> repolect initialize >>>
+# !! Contents managed by Repolect installer — do not edit manually !!
+export PATH="$HOME/.local/bin:$PATH"
+# <<< repolect initialize <<<
+REOF
+        warn "PATH updated. Run: source $rc_file  (or open a new terminal)"
+    fi
+}
+ 
+# ── pipx installer ────────────────────────────────────────────────────────────
+ 
+install_pipx() {
+    info "Installing pipx..."
+    $PY -m pip install --user pipx --quiet && $PY -m pipx ensurepath --quiet
+    export PATH="$HOME/.local/bin:$PATH"
 }
  
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -322,26 +363,71 @@ main() {
     # Clean up leading comma if EXTRAS started empty
     EXTRAS=$(echo "$EXTRAS" | sed 's/^,//')
  
-    # ── Step 3: Install Repolect ────────────────────────────────────────────
+    # ── Step 3: Install Repolect ─────────────────────────────────────────────
+    # Strategy: pipx first (isolated env for CLI tools — industry standard).
+    # Falls back to pip --user if pipx is unavailable or install fails.
  
     echo ""
     printf "${BOLD}  Step 3: Installing Repolect${NC}\n"
     echo ""
  
-    if [ -n "$EXTRAS" ]; then
-        info "Installing repolect[$EXTRAS]..."
-        $PY -m pip install --upgrade "repolect[$EXTRAS]" 2>/dev/null || \
-        $PY -m pip install --upgrade "git+https://github.com/Bibyutatsu/Repolect.git#egg=repolect[$EXTRAS]" 2>/dev/null || \
-        $PY -m pip install --upgrade -e ".[$EXTRAS]" 2>/dev/null || \
-        error "Failed to install Repolect. Check your Python environment."
+    REPOLECT_INSTALLED=false
+    USED_PIPX=false
+ 
+    # ── 3a: Attempt pipx ─────────────────────────────────────────────────────
+    if command -v pipx &> /dev/null; then
+        info "pipx detected — installing into isolated environment..."
     else
-        info "Installing repolect..."
-        $PY -m pip install --upgrade repolect 2>/dev/null || \
-        $PY -m pip install --upgrade git+https://github.com/Bibyutatsu/Repolect.git 2>/dev/null || \
-        $PY -m pip install --upgrade -e . 2>/dev/null || \
-        error "Failed to install Repolect. Check your Python environment."
+        info "pipx not found — bootstrapping pipx first..."
+        install_pipx
     fi
-    success "Repolect installed"
+ 
+    if command -v pipx &> /dev/null; then
+        INJECT_ARGS=""
+        if [ -n "$EXTRAS" ]; then
+            # pipx install the base, then inject extras
+            INJECT_ARGS="$EXTRAS"
+        fi
+ 
+        if pipx install repolect --force --quiet 2>/dev/null || \
+           pipx install "git+https://github.com/Bibyutatsu/Repolect.git" --force --quiet 2>/dev/null; then
+ 
+            # Inject optional extras into the pipx venv
+            if [ -n "$INJECT_ARGS" ]; then
+                info "Injecting extras [$INJECT_ARGS] into pipx venv..."
+                IFS=',' read -ra EXTRA_PKGS <<< "$INJECT_ARGS"
+                for pkg in "${EXTRA_PKGS[@]}"; do
+                    case "$pkg" in
+                        graph)   pipx inject repolect falkordblite --quiet 2>/dev/null || true ;;
+                        viz)     pipx inject repolect streamlit pyvis --quiet 2>/dev/null || true ;;
+                        ollama)  pipx inject repolect ollama --quiet 2>/dev/null || true ;;
+                    esac
+                done
+            fi
+ 
+            pipx ensurepath --quiet 2>/dev/null || true
+            success "Repolect installed via pipx (isolated environment)"
+            REPOLECT_INSTALLED=true
+            USED_PIPX=true
+        fi
+    fi
+ 
+    # ── 3b: Fallback — pip --user ─────────────────────────────────────────────
+    if [ "$REPOLECT_INSTALLED" = false ]; then
+        warn "pipx install failed. Falling back to pip --user..."
+        if [ -n "$EXTRAS" ]; then
+            $PY -m pip install --user --upgrade "repolect[$EXTRAS]" 2>/dev/null || \
+            $PY -m pip install --user --upgrade "git+https://github.com/Bibyutatsu/Repolect.git#egg=repolect[$EXTRAS]" 2>/dev/null || \
+            error "Failed to install Repolect. Check your Python environment."
+        else
+            $PY -m pip install --user --upgrade repolect 2>/dev/null || \
+            $PY -m pip install --user --upgrade git+https://github.com/Bibyutatsu/Repolect.git 2>/dev/null || \
+            error "Failed to install Repolect. Check your Python environment."
+        fi
+        setup_shell_path
+        success "Repolect installed via pip --user"
+        REPOLECT_INSTALLED=true
+    fi
  
     # ── Step 4: Gitignore ────────────────────────────────────────────────────
  
