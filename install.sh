@@ -4,46 +4,43 @@
 
 set -e
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Colours ───────────────────────────────────────────────────────────────────
 
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 info()    { printf "${BLUE}  ▸${NC} %s\n" "$*"; }
 success() { printf "${GREEN}  ✓${NC} %s\n" "$*"; }
 warn()    { printf "${YELLOW}  ⚠${NC} %s\n" "$*"; }
 error()   { printf "${RED}  ✗${NC} %s\n" "$*" >&2; exit 1; }
 
+# ── Prompt helpers ────────────────────────────────────────────────────────────
+
 prompt_input() {
-    local prompt="$1"
-    local default="$2"
-    local result=""
+    local prompt="$1" default="$2" result=""
     if [ -n "$default" ]; then
-        printf "${BOLD}  %s${NC} [${GREEN}%s${NC}]: " "$prompt" "$default" > /dev/tty
+        printf "${BOLD}  %s${NC} [${GREEN}%s${NC}]: " "$prompt" "$default" >/dev/tty
     else
-        printf "${BOLD}  %s${NC}: " "$prompt" > /dev/tty
+        printf "${BOLD}  %s${NC}: " "$prompt" >/dev/tty
     fi
-    read -r result < /dev/tty
-    echo "${result:-$default}"
+    read -r result </dev/tty
+    printf "%s" "${result:-$default}"
 }
 
 prompt_secret() {
-    local prompt="$1"
-    local result=""
-    printf "${BOLD}  %s${NC}: " "$prompt" > /dev/tty
-    read -rs result < /dev/tty
-    echo "" > /dev/tty
-    echo "$result"
+    local prompt="$1" result=""
+    printf "${BOLD}  %s${NC}: " "$prompt" >/dev/tty
+    read -rs result </dev/tty
+    printf "\n" >/dev/tty
+    printf "%s" "$result"
 }
 
 prompt_yn() {
-    local prompt="$1"
-    local default="$2"
-    local result
+    local prompt="$1" default="$2" result
     result=$(prompt_input "$prompt (y/n)" "$default")
     case "$result" in
         [yY]|[yY][eE][sS]) return 0 ;;
@@ -51,88 +48,162 @@ prompt_yn() {
     esac
 }
 
-# ── Checks ───────────────────────────────────────────────────────────────────
+# ── Extras builder ────────────────────────────────────────────────────────────
+# Avoids the comma-prefix/sed cleanup pattern.
+
+EXTRAS=""
+add_extra() { EXTRAS="${EXTRAS:+${EXTRAS},}$1"; }
+
+extras_spec() {
+    # Returns "repolect" or "repolect[a,b,c]"
+    if [ -n "$EXTRAS" ]; then
+        printf "repolect[%s]" "$EXTRAS"
+    else
+        printf "repolect"
+    fi
+}
+
+# ── Python detection ──────────────────────────────────────────────────────────
 
 check_python() {
-    if command -v python3 &> /dev/null; then
+    if command -v python3 &>/dev/null; then
         PY="python3"
-    elif command -v python &> /dev/null; then
+    elif command -v python &>/dev/null; then
         PY="python"
     else
         error "Python 3 not found. Install Python 3.10+ and try again."
     fi
 
     PY_VERSION=$($PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    PY_MAJOR=$($PY -c 'import sys; print(sys.version_info.major)')
-    PY_MINOR=$($PY -c 'import sys; print(sys.version_info.minor)')
+    PY_MAJOR=$($PY  -c 'import sys; print(sys.version_info.major)')
+    PY_MINOR=$($PY  -c 'import sys; print(sys.version_info.minor)')
 
-    if [ "$PY_MAJOR" -lt 3 ] || ([ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]); then
-        error "Python 3.10+ required (found $PY_VERSION)"
+    if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+        error "Python 3.10+ required (found $PY_VERSION)."
     fi
 
-    success "Python $PY_VERSION found"
-    
-    # Dynamically detect Python user-site bin directory (differs on macOS vs Linux)
-    USER_BASE=$($PY -m site --user-base 2>/dev/null || echo "$HOME/.local")
-    PY_USER_BIN="$USER_BASE/bin"
-    # Ensure it's an absolute path
-    if [[ ! "$PY_USER_BIN" = /* ]]; then
-        PY_USER_BIN="$HOME/$PY_USER_BIN"
-    fi
+    success "Python $PY_VERSION"
+
+    # Canonical user-site bin dir — works on macOS and Linux
+    PY_USER_BIN=$($PY -m site --user-base 2>/dev/null || echo "$HOME/.local")
+    PY_USER_BIN="${PY_USER_BIN}/bin"
 }
 
 check_pip() {
-    if ! $PY -m pip --version &> /dev/null; then
-        error "pip not found. Install pip and try again."
-    fi
+    $PY -m pip --version &>/dev/null || error "pip not found. Install pip and try again."
     success "pip found"
 }
 
-check_ollama() {
-    if command -v ollama &> /dev/null; then
-        return 0
-    fi
-    return 1
+# ── PATH helpers ──────────────────────────────────────────────────────────────
+
+# Detect the user's login shell from $SHELL, not from whatever shell is running
+# this script (which may be /bin/bash when invoked via 'curl | bash' on a Zsh
+# user's machine).
+detect_rc_file() {
+    local user_shell
+    user_shell="$(basename "${SHELL:-bash}")"
+    case "$user_shell" in
+        zsh)  RC_FILE="$HOME/.zshrc" ;;
+        fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
+        *)    RC_FILE="$HOME/.bashrc" ;;
+    esac
 }
 
-# ── Ollama helpers ───────────────────────────────────────────────────────────
+# Write an idempotent block to the user's RC file.
+write_rc_path() {
+    local bin_dir="$1"
+    [ -f "$RC_FILE" ] || touch "$RC_FILE"
 
-install_ollama() {
-    if check_ollama; then
-        success "Ollama already installed"
+    if grep -q '# >>> repolect initialize >>>' "$RC_FILE" 2>/dev/null; then
+        success "Shell PATH already configured in $RC_FILE"
         return
     fi
 
+    if [ "$RC_FILE" = "$HOME/.config/fish/config.fish" ]; then
+        # Fish uses a different PATH syntax
+        cat >>"$RC_FILE" <<REOF
+
+# >>> repolect initialize >>>
+# !! Contents managed by Repolect installer — do not edit manually !!
+fish_add_path "$bin_dir"
+# <<< repolect initialize <<<
+REOF
+    else
+        cat >>"$RC_FILE" <<REOF
+
+# >>> repolect initialize >>>
+# !! Contents managed by Repolect installer — do not edit manually !!
+export PATH="${bin_dir}:\$PATH"
+# <<< repolect initialize <<<
+REOF
+    fi
+    success "PATH updated in $RC_FILE"
+}
+
+# Make binaries available in the CURRENT process — so we can call repolect
+# right after install without the user needing to source anything.
+activate_path() {
+    local bin_dir="$1"
+    case ":$PATH:" in
+        *":${bin_dir}:"*) ;;   # already present
+        *) export PATH="${bin_dir}:${PATH}" ;;
+    esac
+}
+
+# ── pipx ──────────────────────────────────────────────────────────────────────
+
+ensure_pipx() {
+    if command -v pipx &>/dev/null; then
+        success "pipx found"
+        return
+    fi
+
+    info "pipx not found — installing..."
+    $PY -m pip install --user pipx --quiet
+    activate_path "$PY_USER_BIN"   # make pipx visible right now
+
+    if ! command -v pipx &>/dev/null; then
+        error "pipx installed but not on PATH ($PY_USER_BIN). Re-run after adding it to PATH."
+    fi
+    success "pipx installed"
+}
+
+# ── Ollama ────────────────────────────────────────────────────────────────────
+
+install_ollama() {
+    if command -v ollama &>/dev/null; then
+        success "Ollama already installed"
+        return
+    fi
     info "Installing Ollama..."
     curl -fsSL https://ollama.com/install.sh | sh
     success "Ollama installed"
 }
 
 start_ollama() {
-    if curl -s http://localhost:11434/api/tags &> /dev/null; then
+    if curl -s http://localhost:11434/api/tags &>/dev/null; then
         success "Ollama is running"
         return
     fi
 
     info "Starting Ollama..."
-    ollama serve &> /dev/null &
-
+    ollama serve &>/dev/null &
+    local i
     for i in $(seq 1 30); do
-        if curl -s http://localhost:11434/api/tags &> /dev/null; then
+        if curl -s http://localhost:11434/api/tags &>/dev/null; then
             success "Ollama is running"
             return
         fi
         sleep 1
     done
-
-    error "Ollama failed to start. Run 'ollama serve' manually."
+    error "Ollama failed to start. Run 'ollama serve' manually and re-run the installer."
 }
 
 pull_model() {
-    local model="$1"
-    local label="$2"
+    local model="$1" label="$2"
 
-    if ollama list 2>/dev/null | grep -q "^${model}"; then
+    # Exact match on the name column (NAME is the first whitespace-delimited field)
+    if ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$model"; then
         success "$label model '$model' already available"
         return
     fi
@@ -142,16 +213,14 @@ pull_model() {
     success "$label model '$model' ready"
 }
 
-# ── Config writer ────────────────────────────────────────────────────────────
+# ── Config writer ─────────────────────────────────────────────────────────────
 
 write_config() {
     local config_dir="$HOME/.repolect"
     local config_file="$config_dir/config.yaml"
-
     mkdir -p "$config_dir"
-    cat > "$config_file" << EOF
-# Repolect configuration
-# Generated by install.sh
+    cat >"$config_file" <<EOF
+# Repolect configuration — generated by install.sh
 
 # LLM provider: "ollama" or "openai-compatible"
 provider: $1
@@ -159,370 +228,243 @@ base_url: $2
 model_name: $3
 api_key: $4
 
-# LLM call defaults
+# LLM defaults
 temperature: 0.1
 max_summarization_tokens: 400
 max_reasoning_tokens: 1000
 timeout: 60
 
-# Embeddings (leave empty to disable)
+# Embeddings (leave empty to disable semantic search)
 embedding_provider: $5
 embedding_model: $6
 embedding_base_url: $7
 EOF
-
-    success "Config saved to $config_file"
+    success "Config saved → $config_file"
 }
 
-# ── Gitignore helper ─────────────────────────────────────────────────────────
+# ── .gitignore ────────────────────────────────────────────────────────────────
 
 ensure_gitignore() {
-    local gitignore=".gitignore"
-    local entry=".repolect/"
-
+    local gitignore=".gitignore" entry=".repolect/"
     if [ ! -f "$gitignore" ]; then
-        echo "$entry" > "$gitignore"
+        printf "%s\n" "$entry" >"$gitignore"
         success "Created $gitignore with $entry"
         return
     fi
-
     if grep -qxF "$entry" "$gitignore" 2>/dev/null; then
         success "$entry already in $gitignore"
         return
     fi
-
-    echo "" >> "$gitignore"
-    echo "$entry" >> "$gitignore"
+    printf "\n%s\n" "$entry" >>"$gitignore"
     success "Added $entry to $gitignore"
 }
 
-# ── Shell PATH helper ────────────────────────────────────────────────────────
+# ── Repolect install ──────────────────────────────────────────────────────────
 
-setup_shell_path() {
-    # Detect the user's *real* login shell from $SHELL (set by the OS, not by
-    # the subprocess running this script). This ensures that running the
-    # installer via 'bash', 'sh', or 'curl ... | bash' still writes to .zshrc
-    # when the user's actual shell is Zsh.
-    local bin_dir="$PY_USER_BIN"
-    local user_shell
-    user_shell="$(basename "${SHELL:-bash}")"
+install_repolect() {
+    local spec
+    spec="$(extras_spec)"
 
-    local rc_file
-    case "$user_shell" in
-        zsh)  rc_file="$HOME/.zshrc" ;;
-        fish) rc_file="$HOME/.config/fish/config.fish" ;;
-        *)    rc_file="$HOME/.bashrc" ;;
-    esac
+    # ── Try pipx (preferred: isolated env, clean upgrades) ───────────────────
+    if command -v pipx &>/dev/null; then
+        info "Installing $(extras_spec) via pipx..."
 
-    SHELL_RC_FILE="$rc_file"   # store for later use in Done section
+        # Try PyPI first; fall back to git using PEP 508 direct-reference syntax
+        # so extras are correctly passed in both cases.
+        if pipx install "$spec" --force 2>/dev/null || \
+           pipx install "${spec} @ git+https://github.com/Bibyutatsu/Repolect.git" --force; then
 
-    [ -f "$rc_file" ] || touch "$rc_file"
+            # Discover pipx's bin dir portably rather than hard-coding ~/.local/bin
+            local pipx_bin
+            pipx_bin="$(pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")"
 
-    # Idempotent Conda-style marker block
-    if grep -q '# >>> repolect initialize >>>' "$rc_file" 2>/dev/null; then
-        success "Shell PATH already configured in $rc_file"
-    else
-        info "Adding $bin_dir to PATH in $rc_file"
-        cat >> "$rc_file" << REOF
+            activate_path "$pipx_bin"    # current session
+            write_rc_path  "$pipx_bin"   # future sessions
 
-# >>> repolect initialize >>>
-# !! Contents managed by Repolect installer — do not edit manually !!
-export PATH="$bin_dir:\$PATH"
-# <<< repolect initialize <<<
-REOF
-        success "PATH updated in $rc_file"
+            success "Repolect installed via pipx"
+            return 0
+        fi
+        warn "pipx install failed — falling back to pip --user"
     fi
-}
 
-# ── pipx installer ────────────────────────────────────────────────────────────
+    # ── Fallback: pip --user ─────────────────────────────────────────────────
+    info "Installing $spec via pip --user..."
+    if $PY -m pip install --user --upgrade "$spec" 2>/dev/null || \
+       $PY -m pip install --user --upgrade \
+           "${spec} @ git+https://github.com/Bibyutatsu/Repolect.git"; then
 
-install_pipx() {
-    info "Installing pipx..."
-    $PY -m pip install --user pipx --quiet && $PY -m pipx ensurepath --quiet
-    # Immediately update current session PATH so pipx is available for the next step
-    export PATH="$PY_USER_BIN:$PATH"
-}
+        activate_path "$PY_USER_BIN"    # current session
+        write_rc_path  "$PY_USER_BIN"   # future sessions
 
-# ── Symlink helper: make binaries immediately available ───────────────────────
-
-symlink_to_usr_local_bin() {
-    # /usr/local/bin is on PATH in every macOS terminal session from day one.
-    # Symlinking here means the user never needs to 'source' anything — the
-    # same strategy used by Homebrew, uv, and other popular installers.
-    local target_dir="/usr/local/bin"
-
-    if [ ! -d "$target_dir" ] || [ ! -w "$target_dir" ]; then
-        # Not writable without sudo — skip silently, RC-file PATH is the fallback.
+        success "Repolect installed via pip --user"
         return 0
     fi
 
-    for bin in repolect pipx; do
-        local src
-        src=$(command -v "$bin" 2>/dev/null)
-        if [ -n "$src" ] && [ ! -e "$target_dir/$bin" ]; then
-            ln -sf "$src" "$target_dir/$bin" 2>/dev/null && \
-                success "Linked $bin → $target_dir/$bin (available immediately)"
-        fi
-    done
+    error "Failed to install Repolect. Check your Python/pip environment."
 }
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 main() {
-    echo ""
-    printf "${BOLD}  🧠 Repolect Installer${NC}\n"
-    printf "  Vectorless code intelligence for any codebase\n"
-    echo ""
+    printf "\n${BOLD}  🧠 Repolect Installer${NC}\n"
+    printf "  Vectorless code intelligence for any codebase\n\n"
 
-    # ── Prerequisites ────────────────────────────────────────────────────────
-
+    # ── Prerequisites ─────────────────────────────────────────────────────────
     check_python
     check_pip
-    echo ""
+    detect_rc_file
+    printf "\n"
 
-    # ── Step 1: LLM Provider ─────────────────────────────────────────────────
-
+    # ── Step 1: LLM Provider ──────────────────────────────────────────────────
     printf "${BOLD}  Step 1: Choose your LLM provider${NC}\n"
-    printf "    ${GREEN}1)${NC} Ollama   — Free, private, runs locally\n"
-    printf "    ${GREEN}2)${NC} OpenAI-compatible  — Any OpenAI-compatible API (OpenAI, Azure, etc.)\n"
-    echo ""
+    printf "    ${GREEN}1)${NC} Ollama             — Free, private, runs locally\n"
+    printf "    ${GREEN}2)${NC} OpenAI-compatible  — OpenAI, LM Studio, Azure, etc.\n\n"
     PROVIDER_CHOICE=$(prompt_input "Select provider" "1")
 
-    EXTRAS=""
     WRITE_CONFIG=true
     SHOW_CONFIG_INSTRUCTIONS=false
 
     case "$PROVIDER_CHOICE" in
         1|ollama)
             PROVIDER="ollama"
-            EXTRAS="ollama"
+            add_extra "ollama"   # ensures the ollama Python SDK extra is installed
 
-            echo ""
+            printf "\n"
             install_ollama
             start_ollama
 
-            echo ""
-            info "Choose an LLM model for code analysis."
+            printf "\n"
             info "Browse models at: https://ollama.com/search"
-            LLM_MODEL=$(prompt_input "Model name" "qwen3.5:4b")
+
+            # Show already-installed models so the user can reuse one
+            INSTALLED=$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | tr '\n' '  ')
+            if [ -n "$INSTALLED" ]; then
+                info "Already installed: ${INSTALLED}"
+            fi
+
+            LLM_MODEL=$(prompt_input "LLM model name" "qwen3.5:4b")
             pull_model "$LLM_MODEL" "LLM"
 
             BASE_URL="http://localhost:11434"
             API_KEY=""
 
-            echo ""
+            printf "\n"
             if prompt_yn "Configure embeddings for semantic search?" "y"; then
-                info "Choose an embedding model for semantic search."
-                EMBED_MODEL=$(prompt_input "Embedding model" "qwen3-embedding:0.6b")
+                EMBED_MODEL=$(prompt_input "Embedding model name" "qwen3-embedding:0.6b")
                 pull_model "$EMBED_MODEL" "Embedding"
                 EMBED_PROVIDER="ollama"
                 EMBED_BASE_URL=""
             else
-                warn "Skipping embedding config. You can add it later in ~/.repolect/config.yaml"
-                EMBED_MODEL=""
-                EMBED_PROVIDER=""
-                EMBED_BASE_URL=""
+                warn "Skipping embeddings. Configure later in ~/.repolect/config.yaml"
+                EMBED_MODEL="" EMBED_PROVIDER="" EMBED_BASE_URL=""
             fi
             ;;
 
         2|openai*)
             PROVIDER="openai-compatible"
-            EXTRAS=""
 
-            echo ""
-            printf "${BOLD}  How would you like to configure your provider?${NC}\n"
+            printf "\n${BOLD}  How would you like to configure your provider?${NC}\n"
             printf "    ${GREEN}1)${NC} Enter config via CLI now\n"
-            printf "    ${GREEN}2)${NC} I'll create my own config file\n"
-            echo ""
+            printf "    ${GREEN}2)${NC} I'll create the config file myself\n\n"
             CONFIG_CHOICE=$(prompt_input "Select" "1")
 
             case "$CONFIG_CHOICE" in
-                1|cli*)
-                    echo ""
-                    info "Configure your OpenAI-compatible LLM provider:"
+                1)
+                    printf "\n"
                     BASE_URL=$(prompt_input "Base URL" "https://api.openai.com/v1")
                     LLM_MODEL=$(prompt_input "Model name" "gpt-4o-mini")
-                    API_KEY=$(prompt_secret "API key")
-                    echo ""
+                    API_KEY=$(prompt_secret "API key (hidden)")
+                    [ -z "$API_KEY" ] && warn "No API key provided. Set it later in ~/.repolect/config.yaml"
 
-                    if [ -z "$API_KEY" ]; then
-                        warn "No API key provided. Set it later in ~/.repolect/config.yaml"
-                    fi
-
-                    echo ""
+                    printf "\n"
                     if prompt_yn "Configure embeddings for semantic search?" "y"; then
                         EMBED_PROVIDER="openai-compatible"
-                        EMBED_BASE_URL=$(prompt_input "Embedding API base URL" "$BASE_URL")
-                        EMBED_MODEL=$(prompt_input "Embedding model name" "text-embedding-3-small")
+                        EMBED_BASE_URL=$(prompt_input "Embedding base URL" "$BASE_URL")
+                        EMBED_MODEL=$(prompt_input "Embedding model" "text-embedding-3-small")
                     else
-                        warn "Skipping embedding config. You can add it later in ~/.repolect/config.yaml"
-                        EMBED_PROVIDER=""
-                        EMBED_MODEL=""
-                        EMBED_BASE_URL=""
+                        warn "Skipping embeddings. Configure later in ~/.repolect/config.yaml"
+                        EMBED_PROVIDER="" EMBED_MODEL="" EMBED_BASE_URL=""
                     fi
                     ;;
-
-                2|manual*)
+                2)
                     WRITE_CONFIG=false
                     SHOW_CONFIG_INSTRUCTIONS=true
-                    LLM_MODEL=""
-                    BASE_URL=""
-                    API_KEY=""
-                    EMBED_PROVIDER=""
-                    EMBED_MODEL=""
-                    EMBED_BASE_URL=""
+                    LLM_MODEL="" BASE_URL="" API_KEY=""
+                    EMBED_PROVIDER="" EMBED_MODEL="" EMBED_BASE_URL=""
                     ;;
-
                 *)
-                    error "Invalid option: $CONFIG_CHOICE. Choose 1 or 2."
+                    error "Invalid choice: $CONFIG_CHOICE"
                     ;;
             esac
             ;;
 
         *)
-            error "Invalid option: $PROVIDER_CHOICE. Choose 1 or 2."
+            error "Invalid choice: $PROVIDER_CHOICE"
             ;;
     esac
 
-    # ── Step 2: Optional Extras ──────────────────────────────────────────────
+    # ── Step 2: Optional extras ───────────────────────────────────────────────
+    printf "\n${BOLD}  Step 2: Optional extras${NC}\n\n"
 
-    echo ""
-    printf "${BOLD}  Step 2: Optional extras${NC}\n"
-    echo ""
+    prompt_yn "Install FalkorDB graph backend? (recommended)" "y" && add_extra "graph"
+    prompt_yn "Install visualization (Streamlit graph explorer)?" "n"  && add_extra "viz"
 
-    if prompt_yn "Install FalkorDB graph backend? (recommended)" "y"; then
-        EXTRAS="${EXTRAS},graph"
-    fi
+    # ── Step 3: Install ───────────────────────────────────────────────────────
+    printf "\n${BOLD}  Step 3: Installing $(extras_spec)${NC}\n\n"
+    ensure_pipx
+    install_repolect
 
-    if prompt_yn "Install visualization (Streamlit graph explorer)?" "y"; then
-        EXTRAS="${EXTRAS},viz"
-    fi
-
-    # Clean up leading comma if EXTRAS started empty
-    EXTRAS=$(echo "$EXTRAS" | sed 's/^,//')
-
-    # ── Step 3: Install Repolect ─────────────────────────────────────────────
-    # Strategy: pipx first (isolated env for CLI tools — industry standard).
-    # Falls back to pip --user if pipx is unavailable or install fails.
-
-    echo ""
-    printf "${BOLD}  Step 3: Installing Repolect${NC}\n"
-    echo ""
-
-    REPOLECT_INSTALLED=false
-    USED_PIPX=false
-
-    # ── 3a: Attempt pipx ─────────────────────────────────────────────────────
-    if ! command -v pipx &> /dev/null; then
-        info "pipx not found — bootstrapping pipx first..."
-        install_pipx
-    fi
-
-    if command -v pipx &> /dev/null; then
-        INSTALL_TARGET="repolect"
-        if [ -n "$EXTRAS" ]; then
-            INSTALL_TARGET="repolect[$EXTRAS]"
-        fi
-
-        info "pipx detected — installing $INSTALL_TARGET..."
-        if pipx install "$INSTALL_TARGET" --force --quiet || \
-           pipx install "git+https://github.com/Bibyutatsu/Repolect.git#egg=repolect[$EXTRAS]" --force --quiet; then
-
-            pipx ensurepath --quiet 2>/dev/null || true
-            # Always write Python bin dir to the user's real shell RC.
-            # pipx ensurepath only updates the subprocess shell (bash when
-            # run via 'curl | bash'), not the user's actual Zsh config.
-            setup_shell_path
-            # Symlink into /usr/local/bin so binaries work immediately in
-            # the current terminal session without any 'source' step.
-            symlink_to_usr_local_bin
-            success "Repolect installed via pipx (isolated environment)"
-            REPOLECT_INSTALLED=true
-            USED_PIPX=true
-        fi
-    fi
-
-    # ── 3b: Fallback — pip --user ─────────────────────────────────────────────
-    if [ "$REPOLECT_INSTALLED" = false ]; then
-        warn "pipx install failed. Falling back to pip --user..."
-        if [ -n "$EXTRAS" ]; then
-            $PY -m pip install --user --upgrade "repolect[$EXTRAS]" || \
-            $PY -m pip install --user --upgrade "git+https://github.com/Bibyutatsu/Repolect.git#egg=repolect[$EXTRAS]" || \
-            error "Failed to install Repolect. Check your Python environment."
-        else
-            $PY -m pip install --user --upgrade repolect || \
-            $PY -m pip install --user --upgrade git+https://github.com/Bibyutatsu/Repolect.git || \
-            error "Failed to install Repolect. Check your Python environment."
-        fi
-        setup_shell_path
-        success "Repolect installed via pip --user"
-        REPOLECT_INSTALLED=true
-    fi
-
-    # ── Step 4: Gitignore ────────────────────────────────────────────────────
-
+    # ── Step 4: Gitignore ─────────────────────────────────────────────────────
     ensure_gitignore
 
-    # ── Step 5: Write config ─────────────────────────────────────────────────
-
+    # ── Step 5: Write config ──────────────────────────────────────────────────
     if [ "$WRITE_CONFIG" = true ]; then
-        echo ""
+        printf "\n"
         write_config \
-            "$PROVIDER" \
-            "$BASE_URL" \
-            "$LLM_MODEL" \
-            "$API_KEY" \
-            "$EMBED_PROVIDER" \
-            "$EMBED_MODEL" \
-            "$EMBED_BASE_URL"
+            "$PROVIDER" "$BASE_URL" "$LLM_MODEL" "$API_KEY" \
+            "$EMBED_PROVIDER" "$EMBED_MODEL" "$EMBED_BASE_URL"
     fi
 
-    # ── Done ─────────────────────────────────────────────────────────────────
+    # ── Done ──────────────────────────────────────────────────────────────────
+    printf "\n${GREEN}${BOLD}  ✅ Repolect is ready!${NC}\n\n"
 
-    echo ""
-    printf "${GREEN}${BOLD}  ✅ Repolect is ready!${NC}\n"
-    echo ""
+    printf "  ${YELLOW}${BOLD}⚡ To activate in this terminal:${NC}\n"
+    printf "     source %s\n\n" "$RC_FILE"
 
-    # Remind user to source their RC — critical when running via 'bash' or
-    # 'curl | bash' since the PATH export only lives in the subprocess.
-    printf "  ${YELLOW}${BOLD}⚡ Activate now (no new terminal needed):${NC}\n"
-    printf "    source ${SHELL_RC_FILE:-~/.zshrc}\n"
-    echo ""
     printf "  ${BOLD}Quick start:${NC}\n"
-    printf "    cd your-project/\n"
-    printf "    repolect analyze\n"
-    printf "    repolect ask \"how does authentication work?\"\n"
+    printf "     cd your-project/\n"
+    printf "     repolect analyze\n"
+    printf "     repolect ask \"how does authentication work?\"\n"
 
-    if echo "$EXTRAS" | grep -q "viz"; then
-        printf "    repolect viz          # launch graph explorer\n"
-    fi
+    echo "$EXTRAS" | grep -q "viz" && \
+        printf "     repolect viz          # launch graph explorer\n"
 
-    echo ""
-    printf "  ${BOLD}Config:${NC}  ~/.repolect/config.yaml\n"
+    printf "\n  ${BOLD}To add extras later:${NC}\n"
+    printf "     pipx install --force 'repolect[viz]'\n"
+    printf "     pipx install --force 'repolect[graph,viz]'\n"
+
+    printf "\n  ${BOLD}Config:${NC}  ~/.repolect/config.yaml\n"
     printf "  ${BOLD}Docs:${NC}    https://github.com/Bibyutatsu/Repolect\n"
 
     if [ "$SHOW_CONFIG_INSTRUCTIONS" = true ]; then
-        echo ""
-        printf "${YELLOW}${BOLD}  ⚠  You chose to create your own config. Run these commands:${NC}\n"
-        echo ""
-        printf "    mkdir -p ~/.repolect\n"
-        printf "    cat > ~/.repolect/config.yaml << 'EOF'\n"
-        printf "    # Repolect configuration\n"
-        printf "    provider: openai-compatible\n"
-        printf "    base_url: https://api.openai.com/v1\n"
-        printf "    model_name: gpt-4o-mini\n"
-        printf "    api_key: YOUR_API_KEY\n"
-        printf "    temperature: 0.1\n"
-        printf "    max_summarization_tokens: 400\n"
-        printf "    max_reasoning_tokens: 1000\n"
-        printf "    timeout: 60\n"
-        printf "    embedding_provider: openai-compatible\n"
-        printf "    embedding_model: text-embedding-3-small\n"
-        printf "    embedding_base_url: https://api.openai.com/v1\n"
-        printf "    EOF\n"
+        printf "\n${YELLOW}${BOLD}  ⚠  Manual config — run these commands:${NC}\n\n"
+        printf "     mkdir -p ~/.repolect\n"
+        printf "     cat > ~/.repolect/config.yaml << 'EOF'\n"
+        printf "     provider: openai-compatible\n"
+        printf "     base_url: https://api.openai.com/v1\n"
+        printf "     model_name: gpt-4o-mini\n"
+        printf "     api_key: YOUR_API_KEY\n"
+        printf "     temperature: 0.1\n"
+        printf "     max_summarization_tokens: 400\n"
+        printf "     max_reasoning_tokens: 1000\n"
+        printf "     timeout: 60\n"
+        printf "     embedding_provider: openai-compatible\n"
+        printf "     embedding_model: text-embedding-3-small\n"
+        printf "     embedding_base_url: https://api.openai.com/v1\n"
+        printf "     EOF\n"
     fi
 
-    echo ""
+    printf "\n"
 }
 
 main "$@"
