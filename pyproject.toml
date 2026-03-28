@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
  
 [project]
 name = "repolect"
-version = "0.1.1"
-description = "Vectorless code intelligence — reasoning-based retrieval over any codebase"
+dynamic = ["version"]
+description = "Reasoning-based code intelligence for any codebase"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -32,7 +32,6 @@ dependencies = [
 [project.optional-dependencies]
 graph = ["falkordblite>=0.9.0"]
 ollama = ["ollama>=0.2.0"]
-embeddings = ["ollama>=0.2.0"]
 mcp = ["mcp>=1.0.0"]
 viz = ["streamlit", "pyvis"]
 all = [
@@ -51,6 +50,9 @@ repolect = "repolect.cli:cli"
 Homepage = "https://github.com/Bibyutatsu/Repolect"
 Repository = "https://github.com/Bibyutatsu/Repolect"
 Changelog = "https://github.com/Bibyutatsu/Repolect/blob/main/CHANGELOG.md"
+
+[tool.setuptools.dynamic]
+version = {attr = "repolect.version.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["repolect*"]

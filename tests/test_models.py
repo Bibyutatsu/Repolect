@@ -121,9 +121,10 @@ def make_meta(**kwargs) -> TreeMeta:
 
 
 def test_tree_meta_defaults():
+    from repolect import __version__
     meta = make_meta()
     assert meta.node_count == 0
-    assert meta.repolect_version == "0.1.0"
+    assert meta.repolect_version == __version__
     assert meta.graph_backend == "networkx"
 
 

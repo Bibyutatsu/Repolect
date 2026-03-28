@@ -26,6 +26,16 @@ jobs:
     - name: Install build
       run: pip install build
 
+    - name: Check version matches release tag
+      run: |
+        PKG_VERSION=$(python -c "import repolect.version; print(repolect.version.__version__)")
+        TAG_VERSION="${GITHUB_REF_NAME#v}"   # strips leading 'v' from tag
+        if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+          echo "❌ version.py says $PKG_VERSION but release tag is $TAG_VERSION"
+          exit 1
+        fi
+        echo "✅ Version $PKG_VERSION matches tag"
+
     - name: Build sdist and wheel
       run: python -m build
 

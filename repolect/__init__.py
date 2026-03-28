@@ -16,7 +16,7 @@ from .embedder import BaseEmbedder, OllamaEmbedder, OpenAICompatibleEmbedder, ge
 from .tree_builder import build_raw_tree, build_graph, reparse_stale_files
 from .git_utils import detect_repo_root, is_git_repo
 
-__version__ = "0.1.1"
+from .version import __version__
 
 __all__ = [
     # Models
