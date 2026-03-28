@@ -5,12 +5,15 @@ on:
     types: [published]
 
 permissions:
-  id-token: write   # Required for OIDC Trusted Publishers — no API tokens needed
+  id-token: write    # Required for OIDC Trusted Publishers
+  contents: read     # ← ADD THIS — allows checkout to work
 
 jobs:
   build-and-publish:
     name: Build and publish to PyPI
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # ← add this too for the warning
 
     steps:
     - uses: actions/checkout@v4
@@ -18,7 +21,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: "3.11"
 
     - name: Install build
       run: pip install build
@@ -30,4 +33,3 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         print-hash: true
-        # Trusted Publisher is configured on PyPI — no API token required here
