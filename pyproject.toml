@@ -9,6 +9,7 @@ description = "Vectorless code intelligence — reasoning-based retrieval over a
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
+authors = [{name = "Bibyutatsu", email = "bibhash.c.mitra@email.com"}]
 keywords = ["code-intelligence", "rag", "llm", "mcp", "graph", "code-search"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -46,6 +47,11 @@ dev = ["pytest>=7.4", "pytest-cov", "black>=24.0", "mypy>=1.8", "ruff>=0.3.0"]
 [project.scripts]
 repolect = "repolect.cli:cli"
  
+[project.urls]
+Homepage = "https://github.com/Bibyutatsu/Repolect"
+Repository = "https://github.com/Bibyutatsu/Repolect"
+Changelog = "https://github.com/Bibyutatsu/Repolect/blob/main/CHANGELOG.md"
+
 [tool.setuptools.packages.find]
 include = ["repolect*"]
 

@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Thread-safe SQLite caching for parallel LLM summarization
 - Unicode non-printable character errors in parser output
-- Legacy `RepoBrain` branding replaced with `Repolect`
+- Initial public release as `Repolect`
 
 ### Changed
 - LLM providers refactored to unified `BaseLLM`/`BaseEmbedder` abstract classes
