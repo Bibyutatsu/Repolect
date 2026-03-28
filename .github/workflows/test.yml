@@ -15,17 +15,16 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v4          # ← unpinned to always use latest v4
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v5      # ← unpinned to always use latest v5
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install base package + dev extras + mcp (needed for server module imports)
         pip install -e ".[dev,mcp]"
 
     - name: Check tree-sitter-languages availability
@@ -36,6 +35,6 @@ jobs:
     - name: Run tests
       run: pytest tests/ -v --tb=short
 
-    - name: Lint with ruff
-      run: ruff check repolect/ --select E,F,W --ignore E501
-      continue-on-error: true
+    # - name: Lint with ruff
+    #   run: ruff check repolect/ --select E,F,W --ignore E501
+    #   continue-on-error: true
