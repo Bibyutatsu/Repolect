@@ -9,6 +9,11 @@ import pytest
 from repolect.parser import parse_file
 from repolect.models import CodeNode
 
+# Skip the entire module if tree-sitter-languages is not installed
+# (e.g. no binary wheel available for this platform/Python version in CI)
+pytest.importorskip("tree_sitter_languages",
+                    reason="tree-sitter-languages not available on this platform")
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
