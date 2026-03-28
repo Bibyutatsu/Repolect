@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
  
 [project]
 name = "repolect"
-version = "0.1.0"
+version = "0.1.1"
 description = "Vectorless code intelligence — reasoning-based retrieval over any codebase"
 readme = "README.md"
 license = {text = "MIT"}
