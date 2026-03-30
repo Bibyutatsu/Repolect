@@ -2,7 +2,7 @@
  
 # Repolect
  
-**Stop searching for code. Start repolecting about it 😉.**
+**Stop searching for code. Start repolecting it 😉.**
  
 Semantic code intelligence powered by LLM reasoning.
 Ask questions, trace execution flows, plan changes, analyze impact — all local-first, no vector database needed.
@@ -35,7 +35,11 @@ Repolect is built primarily for:
 - 🔌 **Full MCP Integration:** Exposes 14 powerful tools to AI editors (Cursor, Claude Code etc) out of the box, drastically reducing token usage and round trips.
 - 🛡️ **Prescriptive Agent Context:** Generates "Agent Skills" depending on functional groups (Louvain communities) in your code to inject targeted context when and where it's needed.
 - 🔒 **Local-First & SLM Optimized:** Engineered to run perfectly on efficient local models like `qwen3.5` or `qwen2.5-coder` via Ollama. No data leaves your machine unless you want it to.
- 
+
+![repolect viz](imgs/repolect_viz.png)
+
+*Note: This is a graph representation of the codebase of Repolect itself.*
+
 ---
  
 ## How It Works
